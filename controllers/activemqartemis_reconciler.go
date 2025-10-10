@@ -2028,9 +2028,6 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 			return nil, err
 		}
 
-		// TODO - make configuable
-		// support <crNname->control-plane-auth-secret, maybe a suffix for the http_server_authenticator realm login.config
-
 		cert_user := newPropsWithHeader()
 		fmt.Fprintln(cert_user, "hawtio=/CN = hawtio-online\\.hawtio\\.svc.*/")
 		fmt.Fprintf(cert_user, "operator=/.*%s.*/\n", operatorCertSubject.CommonName) // regexp syntax start and with /
@@ -2043,6 +2040,11 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 		fmt.Fprintln(cert_roles, "metrics=operator")
 		fmt.Fprintln(cert_roles, "hawtio=hawtio")
 		brokerPropertiesMapData["_cert-roles"] = cert_roles.String()
+
+		// Apply control plane overrides from optional secret
+		if err = applyControlPlaneOverrides(customResource, brokerPropertiesMapData, client, reqLogger); err != nil {
+			return nil, err
+		}
 
 		foundationalProps := newPropsWithHeader()
 		fmt.Fprintf(foundationalProps, "name=%s\n", environments.ResolveBrokerNameFromEnvs(customResource.Spec.Env, customResource.Name))
@@ -2754,6 +2756,61 @@ func getPropertiesResourceNsName(artemis *brokerv1beta1.ActiveMQArtemis) types.N
 		Namespace: artemis.Namespace,
 		Name:      artemis.Name + "-props",
 	}
+}
+
+// applyControlPlaneOverrides checks for an optional control-plane-override secret
+// and applies any overrides to the broker properties map for restricted mode.
+// Returns an error if the secret exists but cannot be retrieved (other than NotFound).
+func applyControlPlaneOverrides(customResource *brokerv1beta1.ActiveMQArtemis, brokerPropertiesMapData map[string]string, client rtclient.Client, log logr.Logger) error {
+	// Allowed keys that can be overridden in control plane configuration
+	allowedKeys := map[string]bool{
+		"_security.config": true,
+		"login.config":     true,
+		"_cert-users":      true,
+		"_cert-roles":      true,
+	}
+
+	// Construct the override secret name using the CR name
+	overrideSecretName := types.NamespacedName{
+		Namespace: customResource.Namespace,
+		Name:      customResource.Name + "-control-plane-override",
+	}
+
+	// Attempt to retrieve the override secret
+	overrideSecret, err := secrets.RetriveSecret(overrideSecretName, nil, client)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			// No override secret exists, this is fine - use defaults
+			log.V(2).Info("No control plane override secret found, using defaults", "secretName", overrideSecretName.Name)
+			return nil
+		}
+		// Other errors should fail reconciliation
+		return fmt.Errorf("failed to retrieve control plane override secret %s: %w", overrideSecretName.Name, err)
+	}
+
+	// Secret exists, apply overrides
+	log.Info("Found control plane override secret, applying overrides", "secretName", overrideSecretName.Name)
+
+	overrideCount := 0
+	for key, value := range overrideSecret.Data {
+		if allowedKeys[key] {
+			// Override the default value with the user-provided one
+			brokerPropertiesMapData[key] = string(value)
+			log.Info("Applied control plane override", "key", key)
+			overrideCount++
+		} else {
+			// Warn about keys that are not allowed
+			log.Info("Ignoring non-control-plane key in override secret", "key", key, "secretName", overrideSecretName.Name)
+		}
+	}
+
+	if overrideCount == 0 {
+		log.Info("Control plane override secret exists but contains no valid override keys", "secretName", overrideSecretName.Name)
+	} else {
+		log.Info("Applied control plane overrides", "count", overrideCount, "secretName", overrideSecretName.Name)
+	}
+
+	return nil
 }
 
 func (reconciler *ActiveMQArtemisReconcilerImpl) addResourceForBrokerProperties(customResource *brokerv1beta1.ActiveMQArtemis, namer common.Namers) (string, bool, map[string]string, error) {

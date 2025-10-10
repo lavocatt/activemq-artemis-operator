@@ -229,5 +229,168 @@ var _ = Describe("minimal", func() {
 			UninstallCert(common.DefaultOperatorCertSecretName, defaultNamespace)
 			UninstallCert(sharedOperandCertName, defaultNamespace)
 		})
+
+		It("control plane override with custom cert-users and cert-roles", func() {
+
+			if os.Getenv("USE_EXISTING_CLUSTER") != "true" {
+				return
+			}
+
+			By("installing operator cert")
+			InstallCert(common.DefaultOperatorCertSecretName, defaultNamespace, func(candidate *cmv1.Certificate) {
+				candidate.Spec.SecretName = common.DefaultOperatorCertSecretName
+				candidate.Spec.CommonName = "activemq-artemis-operator"
+				candidate.Spec.IssuerRef = cmmetav1.ObjectReference{
+					Name: caIssuer.Name,
+					Kind: "ClusterIssuer",
+				}
+			})
+
+			ctx := context.Background()
+
+			crd := brokerv1beta1.ActiveMQArtemis{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ActiveMQArtemis",
+					APIVersion: brokerv1beta1.GroupVersion.Identifier(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      NextSpecResourceName(),
+					Namespace: defaultNamespace,
+				},
+			}
+
+			sharedOperandCertName := common.DefaultOperandCertSecretName
+			By("installing restricted mtls broker cert")
+			InstallCert(sharedOperandCertName, defaultNamespace, func(candidate *cmv1.Certificate) {
+				candidate.Spec.SecretName = sharedOperandCertName
+				candidate.Spec.CommonName = "activemq-artemis-operand"
+				candidate.Spec.DNSNames = []string{common.OrdinalFQDNS(crd.Name, defaultNamespace, 0)}
+				candidate.Spec.IssuerRef = cmmetav1.ObjectReference{
+					Name: caIssuer.Name,
+					Kind: "ClusterIssuer",
+				}
+			})
+
+			By("creating control plane override secret with custom _cert-users and _cert-roles")
+			overrideSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      crd.Name + "-control-plane-override",
+					Namespace: defaultNamespace,
+				},
+				StringData: map[string]string{
+					"_cert-users": `# Custom cert users for testing
+hawtio=/CN = hawtio-online\\.hawtio\\.svc.*/
+operator=/.*activemq-artemis-operator.*/
+probe=/.*activemq-artemis-operand.*/
+`,
+					"_cert-roles": `# Custom cert roles for testing
+status=operator,probe
+metrics=operator
+hawtio=hawtio
+`,
+				},
+			}
+			Expect(k8sClient.Create(ctx, overrideSecret)).Should(Succeed())
+
+			crd.Spec.Restricted = common.NewTrue()
+
+			crd.Spec.BrokerProperties = []string{
+				"messageCounterSamplePeriod=500",
+			}
+
+			By("Deploying the CRD " + crd.ObjectMeta.Name)
+			Expect(k8sClient.Create(ctx, &crd)).Should(Succeed())
+
+			brokerKey := types.NamespacedName{Name: crd.Name, Namespace: crd.Namespace}
+			createdCrd := &brokerv1beta1.ActiveMQArtemis{}
+
+			By("Verifying broker properties secret contains overridden values")
+			Eventually(func(g Gomega) {
+				propsSecretKey := types.NamespacedName{
+					Name:      crd.Name + "-props",
+					Namespace: defaultNamespace,
+				}
+				propsSecret := &corev1.Secret{}
+				g.Expect(k8sClient.Get(ctx, propsSecretKey, propsSecret)).Should(Succeed())
+
+				// Verify override was applied
+				certUsers, exists := propsSecret.Data["_cert-users"]
+				g.Expect(exists).To(BeTrue())
+				g.Expect(string(certUsers)).To(ContainSubstring("# Custom cert users for testing"))
+
+				certRoles, exists := propsSecret.Data["_cert-roles"]
+				g.Expect(exists).To(BeTrue())
+				g.Expect(string(certRoles)).To(ContainSubstring("# Custom cert roles for testing"))
+
+			}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+
+			By("Checking ready, operator can still access broker status via jmx with custom config")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, brokerKey, createdCrd)).Should(Succeed())
+
+				if verbose {
+					fmt.Printf("STATUS: %v\n\n", createdCrd.Status.Conditions)
+				}
+				g.Expect(meta.IsStatusConditionTrue(createdCrd.Status.Conditions, brokerv1beta1.ReadyConditionType)).Should(BeTrue())
+				g.Expect(meta.IsStatusConditionTrue(createdCrd.Status.Conditions, brokerv1beta1.ConfigAppliedConditionType)).Should(BeTrue())
+
+			}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+
+			serverName := common.OrdinalFQDNS(crd.Name, defaultNamespace, 0)
+			By("setting up operator identity on http client")
+			httpClient := http.Client{
+				Transport: http.DefaultTransport,
+				Timeout:   time.Second * 3,
+			}
+
+			httpClientTransport := httpClient.Transport.(*http.Transport)
+			httpClientTransport.TLSClientConfig = &tls.Config{
+				ServerName:         serverName,
+				InsecureSkipVerify: false,
+			}
+			httpClientTransport.TLSClientConfig.GetClientCertificate =
+				func(cri *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+					return common.GetOperatorClientCertificate(k8sClient, cri)
+				}
+
+			if rootCas, err := common.GetRootCAs(k8sClient); err == nil {
+				httpClientTransport.TLSClientConfig.RootCAs = rootCas
+			}
+
+			By("Checking metrics with mtls are still accessible with custom override")
+			Eventually(func(g Gomega) {
+
+				resp, err := httpClient.Get("https://" + serverName + ":8888/metrics")
+				if verbose {
+					fmt.Printf("Resp from metrics get resp: %v, error: %v\n", resp, err)
+				}
+				g.Expect(err).Should(Succeed())
+
+				defer resp.Body.Close()
+				body, err := io.ReadAll(resp.Body)
+				g.Expect(err).Should(Succeed())
+
+				lines := strings.Split(string(body), "\n")
+
+				var done = false
+				for _, line := range lines {
+					if verbose {
+						fmt.Printf("%s\n", line)
+					}
+					if strings.Contains(line, "artemis_total_pending_message_count") {
+						done = true
+					}
+				}
+				g.Expect(done).To(BeTrue())
+
+			}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+
+			By("Cleaning up")
+			Expect(k8sClient.Delete(ctx, createdCrd)).Should(Succeed())
+			Expect(k8sClient.Delete(ctx, overrideSecret)).Should(Succeed())
+
+			UninstallCert(common.DefaultOperatorCertSecretName, defaultNamespace)
+			UninstallCert(sharedOperandCertName, defaultNamespace)
+		})
 	})
 })

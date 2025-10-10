@@ -23,6 +23,7 @@ import (
 	brokerv1beta1 "github.com/arkmq-org/activemq-artemis-operator/api/v1beta1"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -35,6 +36,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -240,4 +242,252 @@ func TestJolokiaStatusCached(t *testing.T) {
 	assert.NotNil(t, valid)
 	assert.True(t, strings.Contains(valid.Error(), "AttributeNotFoundException"))
 
+}
+
+func TestApplyControlPlaneOverrides_NoSecret(t *testing.T) {
+	// Test with no override secret - should use defaults
+	cr := &brokerv1beta1.ActiveMQArtemis{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-broker",
+			Namespace: "test-ns",
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = brokerv1beta1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	brokerPropertiesMapData := map[string]string{
+		"_cert-users":      "default-users",
+		"_cert-roles":      "default-roles",
+		"login.config":     "default-login",
+		"_security.config": "default-security",
+	}
+
+	err := applyControlPlaneOverrides(cr, brokerPropertiesMapData, k8sClient, ctrl.Log)
+
+	assert.Nil(t, err)
+	// Values should remain unchanged
+	assert.Equal(t, "default-users", brokerPropertiesMapData["_cert-users"])
+	assert.Equal(t, "default-roles", brokerPropertiesMapData["_cert-roles"])
+	assert.Equal(t, "default-login", brokerPropertiesMapData["login.config"])
+	assert.Equal(t, "default-security", brokerPropertiesMapData["_security.config"])
+}
+
+func TestApplyControlPlaneOverrides_AllKeysOverridden(t *testing.T) {
+	// Test with override secret containing all 4 keys
+	cr := &brokerv1beta1.ActiveMQArtemis{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-broker",
+			Namespace: "test-ns",
+		},
+	}
+
+	overrideSecret := &corev1.Secret{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-broker-control-plane-override",
+			Namespace: "test-ns",
+		},
+		Data: map[string][]byte{
+			"_cert-users":      []byte("custom-users"),
+			"_cert-roles":      []byte("custom-roles"),
+			"login.config":     []byte("custom-login"),
+			"_security.config": []byte("custom-security"),
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = brokerv1beta1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(overrideSecret).Build()
+
+	brokerPropertiesMapData := map[string]string{
+		"_cert-users":      "default-users",
+		"_cert-roles":      "default-roles",
+		"login.config":     "default-login",
+		"_security.config": "default-security",
+	}
+
+	err := applyControlPlaneOverrides(cr, brokerPropertiesMapData, k8sClient, ctrl.Log)
+
+	assert.Nil(t, err)
+	// All values should be overridden
+	assert.Equal(t, "custom-users", brokerPropertiesMapData["_cert-users"])
+	assert.Equal(t, "custom-roles", brokerPropertiesMapData["_cert-roles"])
+	assert.Equal(t, "custom-login", brokerPropertiesMapData["login.config"])
+	assert.Equal(t, "custom-security", brokerPropertiesMapData["_security.config"])
+}
+
+func TestApplyControlPlaneOverrides_PartialOverride(t *testing.T) {
+	// Test with override secret containing only some keys
+	cr := &brokerv1beta1.ActiveMQArtemis{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-broker",
+			Namespace: "test-ns",
+		},
+	}
+
+	overrideSecret := &corev1.Secret{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-broker-control-plane-override",
+			Namespace: "test-ns",
+		},
+		Data: map[string][]byte{
+			"_cert-users": []byte("custom-users"),
+			"_cert-roles": []byte("custom-roles"),
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = brokerv1beta1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(overrideSecret).Build()
+
+	brokerPropertiesMapData := map[string]string{
+		"_cert-users":      "default-users",
+		"_cert-roles":      "default-roles",
+		"login.config":     "default-login",
+		"_security.config": "default-security",
+	}
+
+	err := applyControlPlaneOverrides(cr, brokerPropertiesMapData, k8sClient, ctrl.Log)
+
+	assert.Nil(t, err)
+	// Only specified keys should be overridden
+	assert.Equal(t, "custom-users", brokerPropertiesMapData["_cert-users"])
+	assert.Equal(t, "custom-roles", brokerPropertiesMapData["_cert-roles"])
+	assert.Equal(t, "default-login", brokerPropertiesMapData["login.config"])
+	assert.Equal(t, "default-security", brokerPropertiesMapData["_security.config"])
+}
+
+func TestApplyControlPlaneOverrides_InvalidKeysIgnored(t *testing.T) {
+	// Test with override secret containing invalid keys
+	cr := &brokerv1beta1.ActiveMQArtemis{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-broker",
+			Namespace: "test-ns",
+		},
+	}
+
+	overrideSecret := &corev1.Secret{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-broker-control-plane-override",
+			Namespace: "test-ns",
+		},
+		Data: map[string][]byte{
+			"_cert-users": []byte("custom-users"),
+			"invalid-key": []byte("should-be-ignored"),
+			"another-bad": []byte("also-ignored"),
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = brokerv1beta1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(overrideSecret).Build()
+
+	brokerPropertiesMapData := map[string]string{
+		"_cert-users":      "default-users",
+		"_cert-roles":      "default-roles",
+		"login.config":     "default-login",
+		"_security.config": "default-security",
+	}
+
+	err := applyControlPlaneOverrides(cr, brokerPropertiesMapData, k8sClient, ctrl.Log)
+
+	assert.Nil(t, err)
+	// Only valid keys should be overridden, invalid keys ignored
+	assert.Equal(t, "custom-users", brokerPropertiesMapData["_cert-users"])
+	assert.Equal(t, "default-roles", brokerPropertiesMapData["_cert-roles"])
+	assert.Equal(t, "default-login", brokerPropertiesMapData["login.config"])
+	assert.Equal(t, "default-security", brokerPropertiesMapData["_security.config"])
+	// Invalid keys should not be added to the map
+	_, exists := brokerPropertiesMapData["invalid-key"]
+	assert.False(t, exists)
+	_, exists = brokerPropertiesMapData["another-bad"]
+	assert.False(t, exists)
+}
+
+func TestApplyControlPlaneOverrides_SecretRetrievalError(t *testing.T) {
+	// Test with retrieval error (not NotFound)
+	cr := &brokerv1beta1.ActiveMQArtemis{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-broker",
+			Namespace: "test-ns",
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = brokerv1beta1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	// Create client that returns a generic error on Get operations for secrets
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*corev1.Secret); ok && strings.Contains(key.Name, "control-plane-override") {
+					return fmt.Errorf("simulated retrieval error")
+				}
+				return client.Get(ctx, key, obj, opts...)
+			},
+		}).
+		Build()
+
+	brokerPropertiesMapData := map[string]string{
+		"_cert-users": "default-users",
+	}
+
+	err := applyControlPlaneOverrides(cr, brokerPropertiesMapData, k8sClient, ctrl.Log)
+
+	// Should return an error
+	assert.NotNil(t, err)
+	assert.True(t, strings.Contains(err.Error(), "failed to retrieve control plane override secret"))
+}
+
+func TestApplyControlPlaneOverrides_EmptyOverrideSecret(t *testing.T) {
+	// Test with override secret that exists but has no valid keys
+	cr := &brokerv1beta1.ActiveMQArtemis{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-broker",
+			Namespace: "test-ns",
+		},
+	}
+
+	overrideSecret := &corev1.Secret{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-broker-control-plane-override",
+			Namespace: "test-ns",
+		},
+		Data: map[string][]byte{
+			"random-key": []byte("random-value"),
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = brokerv1beta1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(overrideSecret).Build()
+
+	brokerPropertiesMapData := map[string]string{
+		"_cert-users":      "default-users",
+		"_cert-roles":      "default-roles",
+		"login.config":     "default-login",
+		"_security.config": "default-security",
+	}
+
+	err := applyControlPlaneOverrides(cr, brokerPropertiesMapData, k8sClient, ctrl.Log)
+
+	assert.Nil(t, err)
+	// All default values should remain unchanged
+	assert.Equal(t, "default-users", brokerPropertiesMapData["_cert-users"])
+	assert.Equal(t, "default-roles", brokerPropertiesMapData["_cert-roles"])
+	assert.Equal(t, "default-login", brokerPropertiesMapData["login.config"])
+	assert.Equal(t, "default-security", brokerPropertiesMapData["_security.config"])
 }
