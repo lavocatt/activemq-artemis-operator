@@ -1,176 +1,159 @@
-# GitHub Copilot - ActiveMQ Artemis Operator Context
+# GitHub Copilot Instructions for ActiveMQ Artemis Operator
 
-## Project Overview
+## Project Context
 
 This is a Kubernetes operator for Apache ActiveMQ Artemis, written in Go using the controller-runtime framework.
 
-## Core Principle
-
-**Documentation is FOR AI assistants, not BY AI assistants** — unless specified directly by the user.
-
-- ✓ USE the documentation to answer questions and understand the codebase
-- ✗ NEVER create new .md files, summaries, or implementation notes
-- ✗ NEVER add to AI_documentation/ directory
-- ✓ Exception: Only create documentation when explicitly requested by the user
-
 ## Documentation
 
-Comprehensive AI-optimized documentation is in `AI_documentation/`:
+Reference these AI-optimized documentation files in `AI_documentation/`:
 
-### Key Files
+1. **AI_KNOWLEDGE_INDEX.yaml** - Concept lookup and code navigation
+2. **operator_architecture.md** - Complete technical architecture (22 subsystems)
+3. **operator_conventions.md** - Naming conventions, defaults, and magic behaviors
+4. **contribution_guide.md** - Development workflow and testing guide
 
-1. **AI_KNOWLEDGE_INDEX.yaml** - Start here for any question
-   - 120+ concepts with definitions and code locations
-   - 55+ common questions mapped to exact answers
-   - Test area mappings
-   - Code entry points
+## Code Patterns
 
-2. **operator_architecture.md** (2,223 lines)
-   - Complete technical architecture
-   - 22 major subsystems
-   - 481 GitHub permalinks to code
+**Controller Pattern:**
+- Reconcile functions in `controllers/`
+- Resource generation in `pkg/resources/`
+- Utilities in `pkg/utils/`
 
-3. **tdd_index.md** (3,230 lines)
-   - 396+ test scenarios
-   - Complete test coverage catalog
-   - TDD feature inventory
+**Key Concepts:**
+- `reconciliation_loop`: controllers/activemqartemis_controller.go::Reconcile
+- `statefulset_management`: pkg/resources/statefulsets/
+- `validation_chain`: controllers/activemqartemis_reconciler.go::validate
+- `broker_properties`: Configuration via properties files
+- `restricted_mode`: Security-sensitive deployment mode
 
-4. **operator_conventions.md**
-   - Naming conventions
-   - Default values
-   - Magic behaviors (suffix-based)
+**Validation:**
+- Chain validators together (see operator_architecture.md "Validation Architecture")
+- Return early on errors
+- Update status conditions: Valid, Deployed, Ready, ConfigApplied
 
-## When Writing Code
+**Naming Conventions:**
+- Resources: `{cr-name}-{resource-type}-{ordinal}`
+- Functions: Clear, descriptive names
+- Constants: ALL_CAPS with descriptive names
 
-**Check Conventions**:
-- Naming patterns: `operator_conventions.md`
-- Default values: `operator_defaults_reference.md`
-- Architecture patterns: `operator_architecture.md`
+## Test-Driven Development
 
-**Follow Patterns**:
-- Controller pattern with reconciliation loop
-- StatefulSet-based broker management
-- Validation chain for CRs
-- Status condition management
+**Required for all changes:**
+- Write tests for new functionality
+- Unit tests: `go test ./controllers -run <TestName>`
+- E2E tests: `USE_EXISTING_CLUSTER=true go test -v ./controllers -ginkgo.focus="<pattern>" -timeout 10m`
+- Code is NOT done until tests pass
 
-**Test Coverage**:
-- Check `tdd_index.md` for similar test patterns
-- Follow TDD approach
-- Test scenarios are well-documented
+**Common test patterns:**
+- Check existing tests in `controllers/*_test.go`
+- Use Ginkgo/Gomega for E2E tests
+- Follow TDD approach: test first, then implement
 
-## Code Guidelines
+**E2E Test Environment Setup:**
 
-1. **Naming**: Follow conventions in `operator_conventions.md`
-   - Resources: `{cr-name}-{resource-type}-{ordinal}`
-   - Functions: Clear, descriptive names
-   - Constants: ALL_CAPS with descriptive names
+Complete minikube setup (required for restricted mode tests):
 
-2. **Structure**: Follow controller pattern
-   - Reconcile functions in `controllers/`
-   - Resource generation in `pkg/resources/`
-   - Utilities in `pkg/utils/`
-
-3. **Validation**: Use validation chain pattern
-   - See `operator_architecture.md#10-validation-architecture`
-   - Chain validators together
-   - Return early on errors
-
-4. **Status**: Update status conditions
-   - Valid, Deployed, Ready, ConfigApplied
-   - See `operator_architecture.md#22-error-handling-and-status-management`
-
-5. When producing code:
-- ✓ always create tests for the functionalities you're adding
-- ✓ run the tests after implementing a functionality
-- ✓ always propose to the user to run the E2E tests related to your addition
-- ✗ DON'T assume that your code is functional until tests are executed and green
-
-## Test Execution Workflow (MANDATORY)
-
-**Every code change MUST follow this workflow:**
-
-1. **Write Code** → Implement the feature
-2. **Write Tests** → Create unit and E2E tests  
-3. **Setup Environment** → AUTOMATICALLY:
-   - Check if minikube/cluster is running
-   - Start minikube if needed (don't ask permission)
-   - Verify cert-manager installed and ready
-4. **Run Tests** → Execute tests AUTOMATICALLY:
-   - Unit tests: `go test ./controllers -run <TestName>`
-   - E2E tests: `USE_EXISTING_CLUSTER=true go test -v ./controllers -ginkgo.focus="<pattern>" -timeout 10m`
-5. **Fix Issues** → If tests fail, fix and re-run
-6. **Complete** → Only mark done when ALL tests pass
-
-**Definition of Done:**
-- ✅ Code compiles with no errors
-- ✅ Tests written for new functionality  
-- ✅ E2E tests executed and passing
-- ✅ Documentation updated
-- ❌ Code is NOT done if tests haven't run
-- ❌ Code is NOT done if tests are failing
-
-**Infrastructure Management:**
-- Automatically check cluster status before E2E tests
-- Automatically start minikube if needed (4GB RAM, 2 CPUs minimum)
-- Only ask user if setup fails
-- Clean up test resources after test completion
-
-**Common E2E Test Patterns:**
 ```bash
-# Control plane/restricted mode tests
-USE_EXISTING_CLUSTER=true go test -v ./controllers \
-  -ginkgo.focus="minimal restricted" -timeout 10m
+# 1. Start minikube with dedicated profile and set as active
+minikube start --profile cursor --memory=4096 --cpus=2
+minikube profile cursor
+kubectl config use-context cursor
 
-# Specific feature test
-USE_EXISTING_CLUSTER=true go test -v ./controllers \
-  -ginkgo.focus="<your-test-name>" -timeout 10m
+# 2. Enable ingress addon (REQUIRED for restricted mode tests)
+minikube addons enable ingress
 
-# Minikube setup commands
-minikube start
+# 3. Wait for ingress controller
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+
+# 4. Enable SSL passthrough (CRITICAL for mTLS in restricted mode)
+kubectl patch deployment ingress-nginx-controller -n ingress-nginx \
+  --type='json' \
+  -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value":"--enable-ssl-passthrough"}]'
+
+# 5. Wait for controller restart
+kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx
+
+# 6. Verify cert-manager (auto-installed by tests if missing)
 kubectl wait --for=condition=ready pod \
   -l app.kubernetes.io/instance=cert-manager \
-  -n cert-manager --timeout=120s
+  -n cert-manager --timeout=120s 2>/dev/null || echo "cert-manager will be auto-installed"
 ```
 
-## Key Concepts (Quick Reference)
+**Run tests:**
+```bash
+USE_EXISTING_CLUSTER=true go test -v ./controllers -ginkgo.focus="<test-name>" -timeout 10m
+```
 
-From AI_KNOWLEDGE_INDEX.yaml:
+**Cleanup:**
+```bash
+minikube stop --profile cursor
+minikube delete --profile cursor
+```
 
-- **reconciliation_loop**: Core control loop (controllers/activemqartemis_controller.go)
-- **statefulset_management**: Pod lifecycle (pkg/resources/statefulsets/)
-- **validation_chain**: CR validation (controllers/activemqartemis_reconciler.go)
-- **broker_properties**: Configuration mechanism (see architecture docs)
-- **persistence**: PVC management and storage
-- **metrics_implementation**: Prometheus integration (Jolokia/JMX Exporter)
+See `contribution_guide.md` (lines 850-889) for complete details.
 
-## Code Link Reference
+## Magic Behaviors
 
-All documentation uses GitHub permalinks to commit `4acadb95`:
-- Links point to exact code as of that commit
-- To see current: replace `/blob/4acadb95/` with `/blob/main/`
-- Function names help locate code if moved
+From operator_conventions.md:
 
-## Getting Context
+**ExtraMount Suffixes** (automatic detection):
+- `-logging-config`: Custom Log4j configuration
+- `-jaas-config`: JAAS authentication configuration  
+- `-bp`: Broker properties configuration
 
-For detailed context, reference these files in your prompts:
-- `@AI_documentation/AI_KNOWLEDGE_INDEX.yaml` - Concept lookup
-- `@AI_documentation/operator_architecture.md` - Architecture details
-- `@AI_documentation/tdd_index.md` - Test examples
+**Platform Detection:**
+- Automatic OpenShift vs Kubernetes detection
+- Route (OpenShift) vs Ingress (Kubernetes) selection
 
-## Documentation Structure
+**Configuration Precedence:**
+1. CR spec fields (highest priority)
+2. Environment variables
+3. Operator defaults (lowest priority)
 
-The knowledge index provides semantic navigation:
-- `concepts`: 120+ concept definitions
-- `common_questions`: 55+ Q&A mappings  
-- `topics`: 10 functional areas
-- `test_areas`: 40+ test mappings
-- `code_locations`: Quick code navigation
+## Status Management
 
-## Link Formatting for IDE Compatibility
+Update CR status conditions in reconciliation:
+- Use `meta.SetStatusCondition()` to update conditions
+- Condition types: ValidConditionType, DeployedConditionType, ReadyConditionType
+- See api/v1beta1/activemqartemis_types.go for status definitions
 
-When citing documentation or code:
-- Use FILE PATH ONLY for clickable links: `AI_documentation/operator_architecture.md`
-- Mention sections separately: "See section 1: High-Level Architecture"
-- Use line numbers for code: `controllers/activemqartemis_controller.go:156-180`
-- DON'T use anchor syntax: `file.md#anchor` (won't open in IDE)
+## Common Integration Points
 
+**Environment Variables:**
+- `JAVA_ARGS_APPEND`: Append to Java arguments
+- `JDK_JAVA_OPTIONS`: JDK options
+- Define constants in activemqartemis_reconciler.go
+
+**Resource Naming:**
+- Use namer.NamerData for consistent naming
+- Pattern: Prefix(cr-name).Base(feature).Suffix(type).Generate()
+
+## Key Files
+
+**Controllers:**
+- activemqartemis_controller.go - Main controller, Reconcile entry
+- activemqartemis_reconciler.go - Reconciliation logic (Process*, validate)
+- activemqartemisscaledown_controller.go - Message migration
+
+**API:**
+- api/v1beta1/activemqartemis_types.go - CR type definitions
+
+**Resources:**
+- pkg/resources/statefulsets/ - StatefulSet generation
+- pkg/resources/services/ - Service generation
+- pkg/resources/pods/ - Pod template configuration
+
+**Utilities:**
+- pkg/utils/common/common.go - Common utilities, version resolution
+- pkg/utils/common/conditions.go - Status condition management
+
+## Important
+
+- Documentation is FOR AI assistants, not BY AI assistants
+- NEVER create new .md files unless explicitly requested
+- NEVER add to AI_documentation/ directory
+- Follow TDD: tests must pass before code is considered complete

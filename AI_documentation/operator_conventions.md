@@ -1,27 +1,3 @@
----
-ai_metadata:
-  doc_type: "conventions_reference"
-  primary_audience: ["developers", "users"]
-  key_topics: ["naming", "defaults", "magic_behavior", "configuration_precedence"]
-  answers_questions:
-    - "What are the naming conventions?"
-    - "What defaults does the operator use?"
-    - "How does convention over configuration work?"
-  concepts_defined: 45
-  code_links: 44
-  complexity: "reference"
-  related_docs: ["operator_defaults_reference.md", "operator_architecture.md"]
----
-
-> **Code Reference Notice**
-> 
-> Source code references in this document are accurate as of **October 9, 2025** (commit [`4acadb95`](https://github.com/arkmq-org/activemq-artemis-operator/commit/4acadb95603c38b82d5d7f63fb538c37ed855662)).
-> 
-> All code links use GitHub permalinks. Conventions are generally stable, but to verify current behavior:
-> - Replace `/blob/4acadb95...` with `/blob/main` in any link
-> - Function/constant names in link text help locate current implementation
-> - Core conventions rarely change, but check current code for critical decisions
-
 This document provides a comprehensive reference of all conventions, defaults, and automatic behaviors implemented by the ActiveMQ Artemis Operator. Understanding these conventions is essential for both using and extending the operator.
 
 **Table of Contents**
@@ -54,13 +30,13 @@ The ActiveMQ Artemis Operator embodies the **"Convention Over Configuration"** p
 > **Philosophy**: The operator should work out-of-the-box with minimal configuration, following established patterns and conventions that users can rely on without explicit configuration.
 
 **🧪 Tested in**: 
-- [`broker_name_test.go`](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/broker_name_test.go) - Naming convention tests
-- [`common_util_test.go`](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/common_util_test.go) - Utility function and convention testing
-- [`suite_test.go`](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/suite_test.go) - Platform detection and environment setup testing
+- controllers/broker_name_test.go::broker_name_test.go - Naming convention tests
+- controllers/common_util_test.go::common_util_test.go - Utility function and convention testing
+- controllers/suite_test.go::suite_test.go - Platform detection and environment setup testing
 
 ## Resource Naming Conventions
 
-The operator [follows strict naming patterns](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/namer/namer.go) that are [implemented through](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_controller.go#L175) the namer package:
+The operator pkg/utils/namer/namer.go that are controllers/activemqartemis_controller.go the namer package:
 
 ### **StatefulSet and Pod Naming**
 ```go
@@ -68,8 +44,8 @@ The operator [follows strict naming patterns](https://github.com/arkmq-org/activ
 StatefulSet: "ex-aao-ss"            // Generated via CrToSS()
 Pods: "ex-aao-ss-0", "ex-aao-ss-1"  // Kubernetes StatefulSet convention
 ```
-[Implementation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/namer/namer.go#L65): `CrToSS()` function  
-[Usage](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_controller.go#L783): Applied in `MakeNamers()`
+pkg/utils/namer/namer.go: `CrToSS()` function  
+controllers/activemqartemis_controller.go: Applied in `MakeNamers()`
 
 ### **Service Naming**
 ```go
@@ -78,7 +54,7 @@ HeadlessService: "ex-aao-hdls-svc"  // For StatefulSet DNS
 PingService: "ex-aao-ping-svc"      // For cluster discovery
 AcceptorService: "ex-aao-artemis-svc" // Per-acceptor exposure
 ```
-[Implementation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_controller.go#L785): Services are [named in MakeNamers()](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_controller.go#L786)
+controllers/activemqartemis_controller.go: Services are controllers/activemqartemis_controller.go
 
 ### **Secret Naming**
 ```go
@@ -88,8 +64,8 @@ Credentials: "ex-aao-credentials-secret"   // Auth credentials
 Console: "ex-aao-console-secret"           // Console TLS
 Netty: "ex-aao-netty-secret"              // Netty TLS
 ```
-[Implementation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2782): Properties naming via `getPropertiesResourceNsName()`  
-[Implementation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_controller.go#L788): Other secrets [named in MakeNamers()](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_controller.go#L794)
+controllers/activemqartemis_reconciler.go: Properties naming via `getPropertiesResourceNsName()`  
+controllers/activemqartemis_controller.go: Other secrets controllers/activemqartemis_controller.go
 
 ### **Label Conventions**
 ```go
@@ -99,11 +75,11 @@ Labels: {
     "ActiveMQArtemis": "<cr-name>"      // Resource association
 }
 ```
-[Implementation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/selectors/label.go#L35): Labels are [generated](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/selectors/label.go#L4) with [standard keys](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/selectors/label.go#L5)
+pkg/utils/selectors/label.go: Labels are pkg/utils/selectors/label.go with pkg/utils/selectors/label.go
 
 ## Platform Detection and Adaptation Conventions
 
-The operator [automatically detects and adapts](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/main.go#L248) to different Kubernetes platforms:
+The operator main.go to different Kubernetes platforms:
 
 ### **OpenShift vs Kubernetes Detection**
 ```go
@@ -116,7 +92,7 @@ isOpenshift = DetectOpenshiftWith(restConfig)
 // OpenShift: Detects FIPS mode from cluster config
 // Kubernetes: Assumes standard compliance
 ```
-[Detection Logic](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/common/common.go)
+pkg/utils/common/common.go
 
 ### **Architecture Support**
 ```go
@@ -127,7 +103,7 @@ RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_<version>
 
 // Supported architectures: amd64, arm64, s390x, ppc64le
 ```
-[Image Selection Logic](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/common/common.go#L327): Architecture-specific images are [tried first](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/common/common.go#L330), then [falls back to generic](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/common/common.go#L335)
+pkg/utils/common/common.go: Architecture-specific images are pkg/utils/common/common.go, then pkg/utils/common/common.go
 
 ## Persistence and Storage Conventions
 
@@ -141,7 +117,7 @@ storage.accessMode: "ReadWriteOnce"   // Default access mode
 // Convention: PVCs retained on scale-down when messageMigration enabled
 // Convention: Each broker pod gets its own PVC in StatefulSet
 ```
-[Storage Implementation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L3066): Persistence is [enabled when configured](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L3066), [PVC templates are created](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L3061) for each broker
+controllers/activemqartemis_reconciler.go: Persistence is controllers/activemqartemis_reconciler.go, controllers/activemqartemis_reconciler.go for each broker
 
 ## Service Discovery and Networking Conventions
 
@@ -159,13 +135,13 @@ Route: "<service-name>-rte"                     // Route per service
 Ingress: "<service-name>-ing"                   // Ingress per service
 // Convention: Requires ingress controller with SSL passthrough support
 ```
-[Service Creation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/resources/services/service.go#L11): Services are [created with standard patterns](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/resources/services/service.go#L38)  
-[Route Creation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/resources/routes/route.go#L10): Routes [use passthrough TLS](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/resources/routes/route.go#L41) when [SSL is enabled](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/resources/routes/route.go#L41)  
-[Ingress Creation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/resources/ingresses/ingress.go#L10): Ingresses are [created with SSL support](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/resources/ingresses/ingress.go#L75)
+pkg/resources/services/service.go: Services are pkg/resources/services/service.go  
+pkg/resources/routes/route.go: Routes pkg/resources/routes/route.go when pkg/resources/routes/route.go  
+pkg/resources/ingresses/ingress.go: Ingresses are pkg/resources/ingresses/ingress.go
 
 ## Configuration Precedence Conventions
 
-The operator [follows strict precedence rules](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L1952) for configuration sources. This section demonstrates how the operator consistently prioritizes **explicit user configuration** over **environment-based overrides** over **defaults** across different aspects of the system.
+The operator controllers/activemqartemis_reconciler.go for configuration sources. This section demonstrates how the operator consistently prioritizes **explicit user configuration** over **environment-based overrides** over **defaults** across different aspects of the system.
 
 Two key examples illustrate this precedence philosophy:
 
@@ -189,8 +165,8 @@ Two key examples illustrate this precedence philosophy:
 3. Files within -bp secrets (alphabetical by key name)
 4. Operator-injected properties (restricted mode, metrics, etc.)
 ```
-[Image Selection](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/common/common.go#L317): Images are [determined using precedence](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/common/common.go#L330) in `DetermineImageToUse()`  
-[Properties Precedence](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2569): Properties are [applied in order](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2572) during JVM configuration
+pkg/utils/common/common.go: Images are pkg/utils/common/common.go in `DetermineImageToUse()`  
+controllers/activemqartemis_reconciler.go: Properties are controllers/activemqartemis_reconciler.go during JVM configuration
 
 ## Zero-Configuration Deployment Convention
 
@@ -219,14 +195,14 @@ spec: {}  # Everything else is defaulted!
 The operator uses suffix-based conventions for automatic behavior:
 
 ### **ExtraMount Secret Suffixes**
-- **`-bp`**: [Auto-detected as broker properties source](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2997) when secrets are [processed](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2997)
-- **`-jaas-config`**: [JAAS configuration](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_controller.go#L561) (must be Secret, not ConfigMap) - [validated during setup](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_controller.go#L561)
-- **`-logging-config`**: [Logging configuration](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_controller.go#L558) (must be ConfigMap) - [processed during validation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_controller.go#L558)
+- **`-bp`**: controllers/activemqartemis_reconciler.go when secrets are controllers/activemqartemis_reconciler.go
+- **`-jaas-config`**: controllers/activemqartemis_controller.go (must be Secret, not ConfigMap) - controllers/activemqartemis_controller.go
+- **`-logging-config`**: controllers/activemqartemis_controller.go (must be ConfigMap) - controllers/activemqartemis_controller.go
 
 ### **File Extension Processing**
-- **`.properties`**: [Java properties format](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L85) (default handling)
-- **`.json`**: [JSON format for `-bp` secrets](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L86) (broker parses internally)
-- **`.config`**: [JAAS login configuration](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L88) files
+- **`.properties`**: controllers/activemqartemis_reconciler.go (default handling)
+- **`.json`**: controllers/activemqartemis_reconciler.go (broker parses internally)
+- **`.config`**: controllers/activemqartemis_reconciler.go files
 
 ## Mount Path Conventions
 
@@ -240,7 +216,7 @@ BrokerProperties: "/amq/extra/secrets/<name>/broker.properties"
 JaasConfig: "/amq/extra/secrets/<name>/login.config"           # JaasConfigKey
 LoggingConfig: "/amq/extra/configmaps/<name>/logging.properties" # LoggingConfigKey
 ```
-[Path Usage](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2980): Base paths are [used to construct mount points](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L3020) for all configuration files
+controllers/activemqartemis_reconciler.go: Base paths are controllers/activemqartemis_reconciler.go for all configuration files
 
 ## Environment Variable Patterns
 
@@ -248,16 +224,16 @@ The operator recognizes different environment variables based on deployment mode
 
 ### **JVM Configuration Variables (Mode-Dependent)**
 
-The operator [uses different environment variables](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2539) based on deployment mode:
+The operator controllers/activemqartemis_reconciler.go based on deployment mode:
 
 **Legacy Mode** (`restricted: false`):
-- **JAVA_ARGS_APPEND**: [Used for additional JVM arguments](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L95) in [legacy deployments](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2542)
-- **JAVA_OPTS**: [Standard Java options](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L97) for JVM configuration
+- **JAVA_ARGS_APPEND**: controllers/activemqartemis_reconciler.go in controllers/activemqartemis_reconciler.go
+- **JAVA_OPTS**: controllers/activemqartemis_reconciler.go for JVM configuration
 - **DEBUG_ARGS**: Debug configuration options
 
 **Restricted Mode** (`restricted: true`):
-- **JDK_JAVA_OPTIONS**: [Modern JVM options](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L98) (preferred) [used in restricted mode](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2545)
-- **STATEFUL_SET_ORDINAL**: [Extracted from hostname](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2502) for [ordinal-specific config](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2566)
+- **JDK_JAVA_OPTIONS**: controllers/activemqartemis_reconciler.go (preferred) controllers/activemqartemis_reconciler.go
+- **STATEFUL_SET_ORDINAL**: controllers/activemqartemis_reconciler.go for controllers/activemqartemis_reconciler.go
 
 ### **Operator Behavior Variables**
 
@@ -274,7 +250,7 @@ See [Configuration Precedence Conventions](#configuration-precedence-conventions
 
 ## Constants and Magic Values
 
-Important constants that [drive operator behavior](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L72):
+Important constants that controllers/activemqartemis_reconciler.go:
 
 ```go
 // Suffixes (lines 75-77)
@@ -295,7 +271,7 @@ BrokerPropertiesName = "broker.properties"
 // Special Values (line 94)
 RemoveKeySpecialValue = "-"  // Used to remove/disable features
 ```
-[Constant Usage](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go): These constants are [used throughout the reconciler](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2997) to [maintain consistency](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L3031)
+controllers/activemqartemis_reconciler.go: These constants are controllers/activemqartemis_reconciler.go to controllers/activemqartemis_reconciler.go
 
 ## Regex Patterns
 
@@ -304,18 +280,18 @@ RemoveKeySpecialValue = "-"  // Used to remove/disable features
 // Matches: broker-0.property=value, broker-123.another=value
 Pattern: ^(broker-[0-9]+)\.(.*)$
 ```
-[Pattern Implementation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L3033): Regex is [used to parse](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L3031) ordinal-specific properties
+controllers/activemqartemis_reconciler.go: Regex is controllers/activemqartemis_reconciler.go ordinal-specific properties
 
 ### **JAAS Config Validation**
 ```go
 // Complex regex for JAAS syntax validation (customizable via env var)
 JAAS_CONFIG_SYNTAX_MATCH_REGEX: ^(?:(\s*|(?://.*)|(?s:/\*.*\*/))*\S+\s*{...
 ```
-[JAAS Validation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/common/common.go#L60): Regex [validates JAAS syntax](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/common/common.go#L122) and is [customizable via environment](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/common/common.go#L115)
+pkg/utils/common/common.go: Regex pkg/utils/common/common.go and is pkg/utils/common/common.go
 
 ## Hash-Based Resource Management
 
-The operator [uses Adler-32 checksums](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2810) for efficient change detection:
+The operator controllers/activemqartemis_reconciler.go for efficient change detection:
 
 ```go
 // Legacy immutable ConfigMaps with hash in name
@@ -324,14 +300,14 @@ ConfigMapName: "<cr-name>-props-<adler32-hash>"
 // Modern mutable Secrets with fixed name  
 SecretName: "<cr-name>-props"
 ```
-[Hash Generation](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2764): Checksums are [computed for change detection](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2768) to [trigger updates](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L188)
+controllers/activemqartemis_reconciler.go: Checksums are controllers/activemqartemis_reconciler.go to controllers/activemqartemis_reconciler.go
 
 ## Volume Mount Ordering
 
-Properties are [loaded in strict order](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2569):
-1. [CR `brokerProperties`](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2563) (global first, then ordinal-specific)
-2. [`-bp` secrets](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2570) ([alphabetical by secret name](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L2572))
-3. [Within each `-bp` secret](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L3008): [alphabetical by key name](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L3008)
+Properties are controllers/activemqartemis_reconciler.go:
+1. controllers/activemqartemis_reconciler.go (global first, then ordinal-specific)
+2. controllers/activemqartemis_reconciler.go (controllers/activemqartemis_reconciler.go)
+3. controllers/activemqartemis_reconciler.go: controllers/activemqartemis_reconciler.go
 
 ## Default Values Reference
 
@@ -369,7 +345,7 @@ The operator integrates with `cert-manager` for automated certificate lifecycle 
 - mTLS is **optional** in legacy mode (can use plain-text acceptors)
 - Certificates are mounted as secrets in the broker pods
 
-**Source**: [`pkg/utils/common/common.go#L69`](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/common/common.go#L69)
+**Source**: pkg/utils/common/common.go::pkg/utils/common/common.go#L69
 
 ## Annotation and Label Conventions
 
@@ -407,5 +383,5 @@ BlockReconcileAnnotation = "arkmq.org/block-reconcile"  // Pause reconciliation
 - Operator has full access to all broker management functions
 - In restricted mode: no web console, no init container, certificate-based authentication only
 
-**Source**: [`pkg/utils/common/common.go#L60`](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/pkg/utils/common/common.go#L60) (JAAS validation), [`controllers/activemqartemis_reconciler.go#L110`](https://github.com/arkmq-org/activemq-artemis-operator/blob/4acadb95603c38b82d5d7f63fb538c37ed855662/controllers/activemqartemis_reconciler.go#L110) (apply rule)
+**Source**: pkg/utils/common/common.go::pkg/utils/common/common.go#L60 (JAAS validation), controllers/activemqartemis_reconciler.go::controllers/activemqartemis_reconciler.go#L110 (apply rule)
 
