@@ -9,9 +9,9 @@ This is a Kubernetes operator for Apache ActiveMQ Artemis, written in Go using t
 Reference these AI-optimized documentation files in `AI_documentation/`:
 
 1. **AI_KNOWLEDGE_INDEX.yaml** - Concept lookup and code navigation
-2. **operator_architecture.md** - Complete technical architecture (22 subsystems)
-3. **operator_conventions.md** - Naming conventions, defaults, and magic behaviors
-4. **contribution_guide.md** - Development workflow and testing guide
+2. **contribution_guide.md** - Development workflow and testing guide
+
+Use `codebase_search` to discover patterns and implementations.
 
 ## Code Patterns
 
@@ -28,7 +28,7 @@ Reference these AI-optimized documentation files in `AI_documentation/`:
 - `restricted_mode`: Security-sensitive deployment mode
 
 **Validation:**
-- Chain validators together (see operator_architecture.md "Validation Architecture")
+- Chain validators together (search for validate functions in controllers/activemqartemis_reconciler.go)
 - Return early on errors
 - Update status conditions: Valid, Deployed, Ready, ConfigApplied
 
@@ -96,23 +96,19 @@ minikube delete --profile cursor
 
 See `contribution_guide.md` (lines 850-889) for complete details.
 
-## Magic Behaviors
+## Key Patterns to Discover
 
-From operator_conventions.md:
-
-**ExtraMount Suffixes** (automatic detection):
-- `-logging-config`: Custom Log4j configuration
-- `-jaas-config`: JAAS authentication configuration  
-- `-bp`: Broker properties configuration
+**ExtraMount Suffixes** (automatic detection in code):
+- Search for `-logging-config`, `-jaas-config`, `-bp` in controllers/activemqartemis_reconciler.go
+- These suffixes trigger special behavior when used in spec.deploymentPlan.extraMounts.secrets
 
 **Platform Detection:**
-- Automatic OpenShift vs Kubernetes detection
-- Route (OpenShift) vs Ingress (Kubernetes) selection
+- See pkg/utils/common/common.go for OpenShift vs Kubernetes logic
+- Automatic Route (OpenShift) vs Ingress (Kubernetes) selection
 
 **Configuration Precedence:**
-1. CR spec fields (highest priority)
-2. Environment variables
-3. Operator defaults (lowest priority)
+- Discover by searching for how defaults, environment variables, and CR specs are merged
+- Generally: CR spec fields (highest) > Environment variables > Operator defaults (lowest)
 
 ## Status Management
 

@@ -1,30 +1,24 @@
 # AI Knowledge Index for ActiveMQ Artemis Operator
-# Simplified index for quick concept lookup and navigation
+# Minimal index for code navigation - use codebase_search for discovering patterns
 
-# Core operator concepts mapped to files and symbols
+# Core operator concepts mapped to code locations
 concepts:
   
   # Operator Core
   reconciliation_loop:
     definition: "Core control loop that watches CR changes and reconciles cluster state"
-    file: "operator_architecture.md"
-    section: "High-Level Architecture"
     code:
       - "controllers/activemqartemis_controller.go::Reconcile"
     related: ["controller_pattern", "statefulset_management", "validation_chain"]
   
   controller_pattern:
     definition: "Kubernetes controller pattern for managing ActiveMQ Artemis resources"
-    file: "operator_architecture.md"
-    section: "High-Level Architecture"
     code:
       - "controllers/activemqartemis_controller.go"
     related: ["reconciliation_loop"]
   
   statefulset_management:
     definition: "Creates, updates, and manages StatefulSets for broker pods"
-    file: "operator_architecture.md"
-    section: "StatefulSet Management and Resource Reconciliation"
     code:
       - "controllers/activemqartemis_reconciler.go::ProcessStatefulSet"
       - "pkg/resources/statefulsets/statefulset.go::NewStatefulSetForCR"
@@ -32,8 +26,6 @@ concepts:
   
   validation_chain:
     definition: "Chain of validators that verify CR correctness before reconciliation"
-    file: "operator_architecture.md"
-    section: "Validation Architecture"
     code:
       - "controllers/activemqartemis_reconciler.go::validate"
       - "controllers/activemqartemis_reconciler.go::ValidatePersistence"
@@ -41,33 +33,26 @@ concepts:
   
   broker_properties:
     definition: "Configure broker via properties with global and ordinal-specific support"
-    file: "operator_architecture.md"
-    section: "Configuring Broker Properties"
     code:
       - "controllers/activemqartemis_reconciler.go::ProcessBrokerProperties"
     related: ["configuration_precedence", "extra_mounts"]
   
   restricted_mode:
     definition: "Security-sensitive deployment mode with minimal permissions"
-    file: "operator_architecture.md"
-    section: "Restricted Mode"
     code:
       - "pkg/utils/common/common.go::IsRestricted"
+      - "controllers/activemqartemis_reconciler.go - search for IsRestricted"
     related: ["metrics_implementation", "jmx_exporter"]
   
   # Resource Management
   persistence:
     definition: "PVC creation, management, and dynamic toggling"
-    file: "operator_architecture.md"
-    section: "Storage and Persistence Architecture"
     code:
       - "controllers/activemqartemis_reconciler.go"
     related: ["statefulset_management", "pvc_management"]
   
   message_migration:
     definition: "Message draining when scaling down brokers"
-    file: "operator_architecture.md"
-    section: "Message Migration on Scale-Down"
     code:
       - "controllers/activemqartemisscaledown_controller.go"
     related: ["scaling"]
@@ -75,22 +60,16 @@ concepts:
   # Networking
   acceptor_architecture:
     definition: "Configuration of broker acceptors for client connections"
-    file: "operator_architecture.md"
-    section: "Networking and Exposure Architecture"
     code:
       - "controllers/activemqartemis_reconciler.go"
     related: ["ssl_configuration", "expose_mode"]
   
   connector_architecture:
     definition: "Configuration of broker connectors for broker-to-broker connections"
-    file: "operator_architecture.md"
-    section: "Networking and Exposure Architecture"
     related: ["clustering", "ssl_configuration"]
   
   expose_mode:
     definition: "Platform-aware Route (OpenShift) or Ingress (Kubernetes) selection"
-    file: "operator_architecture.md"
-    section: "Networking and Exposure Architecture"
     code:
       - "pkg/resources/ingresses/ingress.go"
       - "pkg/resources/routes/route.go"
@@ -98,8 +77,6 @@ concepts:
   
   console_architecture:
     definition: "Management console exposure and configuration"
-    file: "operator_architecture.md"
-    section: "Console and Web UI Architecture"
     code:
       - "controllers/activemqartemis_reconciler.go::ProcessConsole"
     related: ["jolokia"]
@@ -107,16 +84,12 @@ concepts:
   # Security
   credential_management:
     definition: "User credential generation and secret management"
-    file: "operator_architecture.md"
-    section: "Credential and Secret Management"
     code:
       - "controllers/activemqartemis_reconciler.go"
     related: ["secrets"]
   
   certificate_management:
     definition: "cert-manager integration and TLS configuration"
-    file: "operator_architecture.md"
-    section: "Certificate Management"
     code:
       - "controllers/activemqartemis_reconciler.go"
       - "pkg/utils/certutil/"
@@ -124,36 +97,26 @@ concepts:
   
   ssl_configuration:
     definition: "SSL/TLS secret configuration for acceptors and connectors"
-    file: "operator_architecture.md"
-    section: "Networking and Exposure Architecture"
     related: ["certificate_management", "acceptor_architecture"]
   
   # Metrics
   metrics_implementation:
     definition: "Prometheus integration via Jolokia (legacy) or JMX Exporter (restricted)"
-    file: "operator_architecture.md"
-    section: "Metrics Implementation"
     code:
       - "controllers/activemqartemis_reconciler.go"
     related: ["jolokia", "jmx_exporter", "restricted_mode"]
   
   jolokia:
     definition: "JMX-over-HTTP bridge for metrics in legacy mode"
-    file: "operator_architecture.md"
-    section: "Console and Web UI Architecture"
     related: ["metrics_implementation"]
   
   jmx_exporter:
     definition: "Prometheus JMX exporter for restricted mode metrics"
-    file: "operator_architecture.md"
-    section: "Metrics Implementation"
     related: ["metrics_implementation", "restricted_mode"]
   
   # Version Management
   version_management:
     definition: "Broker version resolution and upgrade policy"
-    file: "operator_architecture.md"
-    section: "Version Management and Upgrade System"
     code:
       - "pkg/utils/common/common.go"
     related: ["image_resolution"]
@@ -161,23 +124,17 @@ concepts:
   # High Availability
   high_availability:
     definition: "PodDisruptionBudget, affinity, tolerations for HA"
-    file: "operator_architecture.md"
-    section: "High Availability and Resilience"
     code:
       - "pkg/resources/pods/pod.go"
     related: ["pod_disruption_budget"]
   
   pod_disruption_budget:
     definition: "Kubernetes PDB to control voluntary disruptions"
-    file: "operator_architecture.md"
-    section: "High Availability and Resilience"
     related: ["high_availability"]
   
   # Probes
   probe_configuration:
     definition: "Liveness, readiness, and startup probes"
-    file: "operator_architecture.md"
-    section: "Probe Configuration"
     code:
       - "pkg/resources/pods/pod.go"
     related: ["health_checks"]
@@ -185,15 +142,11 @@ concepts:
   # Logging
   logging_configuration:
     definition: "Custom logging properties and environment variables"
-    file: "operator_architecture.md"
-    section: "Logging Configuration"
     related: ["environment_variables"]
   
   # Namespace
   multi_namespace:
     definition: "Watch single, multiple, or all namespaces"
-    file: "operator_architecture.md"
-    section: "Multi-Namespace Deployment"
     code:
       - "main.go"
     related: ["watch_namespace"]
@@ -201,21 +154,15 @@ concepts:
   # Operations
   operational_controls:
     definition: "Block reconcile annotation and resource tracking"
-    file: "operator_architecture.md"
-    section: "Operational Controls"
     related: ["resource_tracking"]
   
   resource_tracking:
     definition: "Tracking and adoption of operator-managed resources"
-    file: "operator_architecture.md"
-    section: "Operational Controls"
     related: ["operational_controls"]
   
   # Status
   status_management:
     definition: "CR status conditions and pod status tracking"
-    file: "operator_architecture.md"
-    section: "Error Handling and Status Management"
     code:
       - "api/v1beta1/activemqartemis_types.go"
       - "pkg/utils/common/conditions.go"
@@ -223,47 +170,37 @@ concepts:
   
   error_handling:
     definition: "Error detection and reporting via status conditions"
-    file: "operator_architecture.md"
-    section: "Error Handling and Status Management"
     related: ["status_management", "validation_chain"]
   
   # Metadata
   metadata_management:
     definition: "Custom annotations and labels propagation"
-    file: "operator_architecture.md"
-    section: "Resource Metadata Management"
     related: ["annotations", "labels"]
   
   # Configuration
   configuration_precedence:
-    definition: "Order of precedence for configuration sources"
-    file: "operator_conventions.md"
-    section: "Configuration Precedence Conventions"
+    definition: "Order of precedence for configuration sources - discover in code"
     related: ["broker_properties"]
   
   naming_conventions:
-    definition: "Resource naming patterns and conventions"
-    file: "operator_conventions.md"
-    section: "Resource Naming Conventions"
+    definition: "Resource naming patterns and conventions - search for namer in codebase"
     related: ["resource_management"]
   
   magic_behavior:
-    definition: "Special behaviors triggered by ExtraMount suffixes"
-    file: "operator_conventions.md"
-    section: "Suffix-Based Magic Behavior"
+    definition: "Special behaviors triggered by ExtraMount suffixes like -bp, -jaas-config, -logging-config"
+    code:
+      - "controllers/activemqartemis_reconciler.go - search for 'Suffix'"
     related: ["extra_mounts", "broker_properties"]
   
   platform_detection:
     definition: "Automatic OpenShift vs Kubernetes detection"
-    file: "operator_conventions.md"
-    section: "Platform Detection and Adaptation"
+    code:
+      - "pkg/utils/common/common.go"
     related: ["openshift", "kubernetes", "expose_mode"]
   
   # Deprecated
   deprecated_crs:
     definition: "ActiveMQArtemisAddress, Security, Scaledown (deprecated)"
-    file: "operator_architecture.md"
-    section: "Deprecated Custom Resources"
     related: ["broker_properties"]
   
   # Development
@@ -281,37 +218,17 @@ concepts:
     section: "Development and Debugging Guide"
     related: ["troubleshooting", "testing"]
 
-# Common questions mapped to documentation
+# Common questions - use codebase_search to discover answers
 questions:
-  "How does the operator work?": "operator_architecture.md - High-Level Architecture"
-  "What is the reconciliation loop?": "operator_architecture.md - High-Level Architecture"
-  "How do I configure broker properties?": "operator_architecture.md - Configuring Broker Properties"
   "How do I add a new field to the CR?": "contribution_guide.md - Adding New API Fields"
   "What is the development workflow?": "contribution_guide.md - Development Workflow"
   "How do I debug the operator?": "contribution_guide.md - Debugging Reconciliation Issues"
   "How do I run tests?": "contribution_guide.md - Running Tests"
-  "How are broker pods created?": "operator_architecture.md - StatefulSet Management"
-  "How does validation work?": "operator_architecture.md - Validation Architecture"
-  "How does persistence work?": "operator_architecture.md - Storage and Persistence Architecture"
-  "How do I configure acceptors?": "operator_architecture.md - Networking and Exposure Architecture"
-  "How do I expose brokers externally?": "operator_architecture.md - Networking and Exposure Architecture"
-  "How do I access the console?": "operator_architecture.md - Console and Web UI Architecture"
-  "How do I configure SSL?": "operator_architecture.md - Certificate Management"
-  "How do I use cert-manager?": "operator_architecture.md - Certificate Management"
-  "What is restricted mode?": "operator_architecture.md - Restricted Mode"
-  "How are credentials generated?": "operator_architecture.md - Credential and Secret Management"
-  "How do metrics work?": "operator_architecture.md - Metrics Implementation"
-  "How do I configure HA?": "operator_architecture.md - High Availability and Resilience"
-  "What is PodDisruptionBudget?": "operator_architecture.md - High Availability and Resilience"
-  "How do I configure logging?": "operator_architecture.md - Logging Configuration"
-  "How are broker versions managed?": "operator_architecture.md - Version Management and Upgrade System"
-  "How do I deploy across namespaces?": "operator_architecture.md - Multi-Namespace Deployment"
-  "How do I pause reconciliation?": "operator_architecture.md - Operational Controls"
-  "How is CR status managed?": "operator_architecture.md - Error Handling and Status Management"
-  "How are resources named?": "operator_conventions.md - Resource Naming Conventions"
-  "What are magic suffixes?": "operator_conventions.md - Suffix-Based Magic Behavior"
-  "How does platform detection work?": "operator_conventions.md - Platform Detection and Adaptation"
-  "What CRs are deprecated?": "operator_architecture.md - Deprecated Custom Resources"
+  "How does the operator work?": "Use codebase_search: 'How does reconciliation loop work?'"
+  "How do I configure broker properties?": "Use codebase_search: 'How are broker properties processed?'"
+  "How are broker pods created?": "Use codebase_search: 'How are StatefulSets created for broker pods?'"
+  "What is restricted mode?": "Use codebase_search: 'What is restricted mode and how does it work?'"
+  "How are resources named?": "Use codebase_search: 'What are the resource naming conventions?'"
 
 # Key code entry points
 code_locations:

@@ -11,7 +11,7 @@ ai_metadata:
   concepts_defined: 25
   code_links: 29
   complexity: "practical"
-  related_docs: ["operator_architecture.md", "tdd_index.md"]
+  related_docs: ["tdd_index.md"]
 ---
 
 > **Code Reference Notice**
@@ -786,8 +786,8 @@ func (r *ActiveMQArtemisReconcilerImpl) validate(customResource *brokerv1beta1.A
 - Mainly updated for catalog/subscription examples ([#1167](https://github.com/arkmq-org/activemq-artemis-operator/issues/1167)/[PR#1168](https://github.com/arkmq-org/activemq-artemis-operator/pull/1168))
 - Not required for most internal features
 
-**Technical Documentation** (`operator_architecture.md`) - **RARELY UPDATED**:
-- Major structural changes are infrequent
+**Technical Documentation** - **Use codebase_search for technical details**:
+- Use `codebase_search` to discover implementation patterns
 - Most implementation details are documented via code comments and tests
 - Update only for significant architectural changes
 
@@ -809,9 +809,9 @@ func (r *ActiveMQArtemisReconcilerImpl) validate(customResource *brokerv1beta1.A
    - Multiple resources must be coordinated
    - Common use case needs demonstration
 
-4. ⚠️ **Architecture Documentation**: Update [operator_architecture.md](operator_architecture.md) if:
-   - Adding new reconciliation phases
-   - Changing controller structure
+4. ⚠️ **Architecture Changes**: For major structural changes:
+   - Document via comprehensive code comments
+   - Update tests to demonstrate new patterns
    - Introducing new design patterns
 
 **Tutorials** (`docs/tutorials/`) - frequently added for complex scenarios ([NO-ISSUE] pattern)
@@ -1119,10 +1119,9 @@ For developers new to the codebase:
 ## Related Documentation
 
 ### Internal Documentation
-- **[Operator Architecture](operator_architecture.md)**: Technical architecture and implementation details
-- **[Operator Conventions](operator_conventions.md)**: Complete reference of conventions, defaults, and magic behaviors
 - **[TDD Test Index](tdd_index.md)**: Comprehensive catalog of all tests (396+ scenarios covering all features)
 - **[User Documentation](../help/operator.md)**: End-user configuration guide
+- **Codebase Search**: Use `codebase_search` to discover implementation patterns and conventions
 - **[Tutorials](../tutorials/)**: Step-by-step guides for common scenarios
 
 ### External Resources
