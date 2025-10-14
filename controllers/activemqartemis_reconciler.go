@@ -2028,8 +2028,8 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 			return nil, err
 		}
 
-		// TODO - make configuable
-		// support <crNname->control-plane-auth-secret, maybe a suffix for the http_server_authenticator realm login.config
+		// Generate default control plane configuration
+		// Can be overridden via <cr-name>-control-plane-override secret (see below)
 
 		cert_user := newPropsWithHeader()
 		fmt.Fprintln(cert_user, "hawtio=/CN = hawtio-online\\.hawtio\\.svc.*/")
@@ -2043,6 +2043,29 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 		fmt.Fprintln(cert_roles, "metrics=operator")
 		fmt.Fprintln(cert_roles, "hawtio=hawtio")
 		brokerPropertiesMapData["_cert-roles"] = cert_roles.String()
+
+		// Check for control plane override secret
+		overrideSecretName := customResource.Name + "-control-plane-override"
+		overrideSecret := &corev1.Secret{}
+		overrideSecretKey := types.NamespacedName{
+			Name:      overrideSecretName,
+			Namespace: customResource.Namespace,
+		}
+		if err := resources.Retrieve(overrideSecretKey, client, overrideSecret); err == nil {
+			reconciler.log.V(1).Info("Found control plane override secret, applying overrides", "secret", overrideSecretName)
+			// Secret exists, apply overrides for allowed keys
+			allowedKeys := []string{"_cert-users", "_cert-roles", "login.config", "_security.config"}
+			for _, key := range allowedKeys {
+				if value, exists := overrideSecret.Data[key]; exists {
+					reconciler.log.V(1).Info("Overriding control plane key", "key", key)
+					brokerPropertiesMapData[key] = string(value)
+				}
+			}
+			// Add to secrets to mount (if not already present)
+			secretsToMount = append(secretsToMount, overrideSecretName)
+		} else {
+			reconciler.log.V(2).Info("No control plane override secret found", "secret", overrideSecretName)
+		}
 
 		foundationalProps := newPropsWithHeader()
 		fmt.Fprintf(foundationalProps, "name=%s\n", environments.ResolveBrokerNameFromEnvs(customResource.Spec.Env, customResource.Name))

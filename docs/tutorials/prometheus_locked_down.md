@@ -813,6 +813,61 @@ kubectl wait ActiveMQArtemis artemis-broker --for=condition=Ready --namespace=lo
 activemqartemis.broker.amq.io/artemis-broker condition met
 ```
 
+### Customizing Control Plane Authentication (Optional)
+
+The control plane in restricted mode refers to the secure communication channels between the operator, operands (broker pods), and metrics collection systems. By default, the operator automatically configures certificate-based authentication with predefined user and role mappings.
+
+However, you may need to customize these defaults when:
+- Adding additional authorized clients (e.g., custom monitoring tools)
+- Using custom certificate subjects that don't match the defaults
+- Implementing organization-specific RBAC policies
+
+#### Control Plane Override Secret
+
+You can override the default control plane configuration by creating a secret named `<cr-name>-control-plane-override` with specific keys. The operator will use your custom values instead of the defaults.
+
+**Allowed override keys:**
+- `_cert-users`: Maps certificate subjects to usernames (Java properties format)
+- `_cert-roles`: Maps usernames to roles (Java properties format)
+- `login.config`: JAAS login configuration
+- `_security.config`: Java security properties
+
+**Example: Adding a custom Prometheus scraper**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: artemis-broker-control-plane-override
+  namespace: locked-down-broker
+type: Opaque
+stringData:
+  _cert-users: |
+    # Map certificate CNs to usernames using regex patterns
+    hawtio=/CN = hawtio-online\.hawtio\.svc.*/
+    operator=/.*activemq-artemis-operator.*/
+    probe=/.*activemq-artemis-operand.*/
+    # Add custom prometheus scraper
+    prometheus=/.*my-prometheus.*/
+  _cert-roles: |
+    # Assign roles to users
+    status=operator,probe
+    metrics=operator,prometheus
+    hawtio=hawtio
+```
+
+Apply the override secret before or after deploying the broker. The operator will automatically detect and apply the overrides:
+
+```bash
+kubectl apply -f artemis-broker-control-plane-override.yaml
+```
+
+**Important notes:**
+- The secret must be created in the same namespace as the broker
+- The operator does not validate the override values - ensure they are correct
+- You must include the operator and probe entries for proper functioning
+- Changes to the override secret require a broker pod restart to take effect
+
 ## Scrape the broker
 
 ### Configure and Deploy Prometheus

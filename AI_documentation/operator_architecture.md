@@ -456,6 +456,58 @@ spec:
   # You would typically have cert-manager create these secrets for you.
 ```
 
+### Control Plane Configuration Override
+
+**Code location**: `controllers/activemqartemis_reconciler.go` lines ~2047-2068
+
+The control plane refers to the secure communication channels between the operator, operands (broker pods), and metrics collection systems. In restricted mode, the operator automatically generates default certificate-based authentication with predefined user and role mappings.
+
+However, you can override these defaults by creating an optional secret named `<cr-name>-control-plane-override`. This allows you to:
+- Add additional authorized clients (e.g., custom monitoring tools)
+- Use custom certificate subjects that don't match the defaults
+- Implement organization-specific RBAC policies
+
+**Allowed override keys:**
+- `_cert-users`: Maps certificate subjects to usernames (Java properties format with regex patterns)
+- `_cert-roles`: Maps usernames to roles (Java properties format)
+- `login.config`: JAAS login configuration
+- `_security.config`: Java security properties
+
+**Example override secret:**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: artemis-restricted-control-plane-override
+  namespace: my-namespace
+type: Opaque
+stringData:
+  _cert-users: |
+    # Default entries (must be included for proper functioning)
+    hawtio=/CN = hawtio-online\.hawtio\.svc.*/
+    operator=/.*activemq-artemis-operator.*/
+    probe=/.*activemq-artemis-operand.*/
+    # Custom entry for additional monitoring
+    prometheus=/.*my-custom-prometheus.*/
+  _cert-roles: |
+    status=operator,probe
+    metrics=operator,prometheus
+    hawtio=hawtio
+```
+
+**Implementation notes:**
+- The operator checks for the override secret after generating defaults
+- If found, the specified keys completely replace the default values
+- The override secret is automatically mounted to the broker pod
+- No validation is performed on override values - users are responsible for correctness
+- Changes require broker pod restart to take effect
+
+**Testing**: See `controllers/controll_plane_test.go` test case "operator role access with control plane override" which validates that:
+1. Operator can access metrics with default cert
+2. Custom prometheus cert (added via override) can access metrics
+3. Unauthorized certs are rejected
+
 ## 7. StatefulSet Management and Resource Reconciliation
 
 > **Note**: For user-facing configuration examples of `deploymentPlan` settings, see the [operator help documentation](../help/operator.md). This section focuses on how the operator implements these features internally.
