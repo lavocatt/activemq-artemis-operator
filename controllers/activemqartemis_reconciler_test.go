@@ -1511,3 +1511,148 @@ func TestBrokerPropertiesDataWithAndWithoutOrdinal(t *testing.T) {
 	assert.True(t, strings.Contains(data[broker999BrokerPropertiesName], "maxDiskUsage=99"))
 	assert.True(t, strings.Contains(data[broker999BrokerPropertiesName], "minDiskFree=7"))
 }
+
+func TestGetControlPlaneOverrideSecret_NotFound(t *testing.T) {
+	// Setup fake client without any secrets
+	_ = brokerv1beta1.AddToScheme(scheme.Scheme)
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
+
+	customResource := &brokerv1beta1.ActiveMQArtemis{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-broker",
+			Namespace: "default",
+		},
+	}
+
+	// Test that non-existent secret returns nil without error
+	secret, err := getControlPlaneOverrideSecret(customResource, fakeClient)
+
+	assert.NoError(t, err, "Should not return error when secret doesn't exist")
+	assert.Nil(t, secret, "Should return nil secret when it doesn't exist")
+}
+
+func TestGetControlPlaneOverrideSecret_Exists(t *testing.T) {
+	// Setup fake client with control plane override secret
+	_ = brokerv1beta1.AddToScheme(scheme.Scheme)
+
+	overrideSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-broker-control-plane-override",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"_cert-users": []byte("custom-user=/CN=custom/"),
+			"_cert-roles": []byte("metrics=custom-user"),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(overrideSecret).Build()
+
+	customResource := &brokerv1beta1.ActiveMQArtemis{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-broker",
+			Namespace: "default",
+		},
+	}
+
+	// Test that existing secret is retrieved
+	secret, err := getControlPlaneOverrideSecret(customResource, fakeClient)
+
+	assert.NoError(t, err, "Should not return error when secret exists")
+	assert.NotNil(t, secret, "Should return the secret")
+	assert.Equal(t, "my-broker-control-plane-override", secret.Name)
+	assert.Contains(t, secret.Data, "_cert-users")
+	assert.Contains(t, secret.Data, "_cert-roles")
+}
+
+func TestApplyControlPlaneOverrides(t *testing.T) {
+	// Setup logger
+	log := ctrl.Log.WithName("test")
+
+	// Setup initial broker properties with defaults
+	brokerPropertiesMapData := map[string]string{
+		"_cert-users":  "# default users\noperator=/.*operator.*/\nprobe=/.*probe.*/",
+		"_cert-roles":  "# default roles\nstatus=operator,probe\nmetrics=operator",
+		"login.config": "// default login config",
+	}
+
+	// Create override secret
+	overrideSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-broker-control-plane-override",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"_cert-users": []byte("# custom users\ncustom=/CN=custom/\noperator=/CN=operator/"),
+			"_cert-roles": []byte("# custom roles\nmetrics=custom,operator"),
+		},
+	}
+
+	// Apply overrides
+	applyControlPlaneOverrides(brokerPropertiesMapData, overrideSecret, log)
+
+	// Verify that overrides replaced defaults
+	assert.Equal(t, "# custom users\ncustom=/CN=custom/\noperator=/CN=operator/", brokerPropertiesMapData["_cert-users"])
+	assert.Equal(t, "# custom roles\nmetrics=custom,operator", brokerPropertiesMapData["_cert-roles"])
+	// Verify that non-overridden keys remain unchanged
+	assert.Equal(t, "// default login config", brokerPropertiesMapData["login.config"])
+}
+
+func TestApplyControlPlaneOverrides_EmptySecret(t *testing.T) {
+	// Setup logger
+	log := ctrl.Log.WithName("test")
+
+	// Setup initial broker properties with defaults
+	brokerPropertiesMapData := map[string]string{
+		"_cert-users": "# default users",
+		"_cert-roles": "# default roles",
+	}
+
+	// Create empty override secret
+	overrideSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-broker-control-plane-override",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{},
+	}
+
+	// Apply overrides (should not change anything)
+	applyControlPlaneOverrides(brokerPropertiesMapData, overrideSecret, log)
+
+	// Verify that defaults remain unchanged
+	assert.Equal(t, "# default users", brokerPropertiesMapData["_cert-users"])
+	assert.Equal(t, "# default roles", brokerPropertiesMapData["_cert-roles"])
+}
+
+func TestApplyControlPlaneOverrides_PartialOverride(t *testing.T) {
+	// Setup logger
+	log := ctrl.Log.WithName("test")
+
+	// Setup initial broker properties with defaults
+	brokerPropertiesMapData := map[string]string{
+		"_cert-users":  "# default users",
+		"_cert-roles":  "# default roles",
+		"login.config": "// default login config",
+	}
+
+	// Create override secret with only one key
+	overrideSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-broker-control-plane-override",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"_cert-users": []byte("# custom users only"),
+		},
+	}
+
+	// Apply overrides
+	applyControlPlaneOverrides(brokerPropertiesMapData, overrideSecret, log)
+
+	// Verify that only _cert-users is overridden
+	assert.Equal(t, "# custom users only", brokerPropertiesMapData["_cert-users"])
+	// Other keys should remain unchanged
+	assert.Equal(t, "# default roles", brokerPropertiesMapData["_cert-roles"])
+	assert.Equal(t, "// default login config", brokerPropertiesMapData["login.config"])
+}
