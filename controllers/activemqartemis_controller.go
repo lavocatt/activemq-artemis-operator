@@ -183,9 +183,10 @@ func (r *ActiveMQArtemisReconciler) Reconcile(ctx context.Context, request ctrl.
 	namer := MakeNamers(customResource)
 	reconciler := NewBrokerClusterReconcilerImpl(customResource, r.toBrokerClusterParent())
 
-	var requeueRequest bool
+	var requeueRequest bool = false
 	var valid bool = false
 	if valid, requeueRequest = reconciler.validate(customResource, r.Client, *namer); valid {
+		reqLogger.Info("test", requeueRequest)
 
 		if !reconcileBlocked {
 			err = reconciler.Process(customResource, *namer, r.Client, r.Scheme)
