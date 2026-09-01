@@ -160,14 +160,21 @@ test-mk-do test-mk-do-v: TEST_VARS = DEPLOY_OPERATOR=true USE_EXISTING_CLUSTER=t
 test-mk-do-fast test-mk-do-fast-v: TEST_ARGS += -test.timeout=30m -ginkgo.label-filter='do && !slow'
 test-mk-do-fast test-mk-do-fast-v: TEST_VARS = DEPLOY_OPERATOR=true USE_EXISTING_CLUSTER=true
 
-test-v test-mk-v test-mk-do-v test-mk-do-fast-v: TEST_ARGS += -v
-test-v test-mk test-mk-v test-mk-do test-mk-do-v test-mk-do-fast test-mk-do-fast-v: TEST_ARGS += -ginkgo.poll-progress-after=150s -ginkgo.fail-fast -coverprofile cover-mk.out
+## Run PR-scoped tests: broker-service, broker controller, control plane (excludes verySlow)
+test-mk-pr test-mk-pr-v: TEST_ARGS += -test.timeout=30m -ginkgo.label-filter='!do && !verySlow' -ginkgo.focus='broker-service|broker controller|minimal'
+test-mk-pr test-mk-pr-v: TEST_VARS = USE_EXISTING_CLUSTER=true RECONCILE_RESYNC_PERIOD=5s
+
+test-v test-mk-v test-mk-do-v test-mk-do-fast-v test-mk-pr-v: TEST_ARGS += -v
+test-v test-mk test-mk-v test-mk-do test-mk-do-v test-mk-do-fast test-mk-do-fast-v test-mk-pr test-mk-pr-v: TEST_ARGS += -ginkgo.poll-progress-after=150s -ginkgo.fail-fast -coverprofile cover-mk.out
 
 test test-v: manifests generate fmt vet envtest
 	$(TEST_VARS) go test ./... -p 1 $(TEST_ARGS) $(TEST_EXTRA_ARGS)
 
 test-mk test-mk-v test-mk-do test-mk-do-v test-mk-do-fast test-mk-do-fast-v: TEST_VARS += HELM=$(HELM)
 test-mk test-mk-v test-mk-do test-mk-do-v test-mk-do-fast test-mk-do-fast-v: manifests generate fmt vet envtest helm
+
+test-mk-pr test-mk-pr-v: TEST_VARS += HELM=$(HELM)
+test-mk-pr test-mk-pr-v: manifests generate fmt vet envtest helm
 	$(TEST_VARS) go test ./... -p 1 $(TEST_ARGS) $(TEST_EXTRA_ARGS)
 
 ##@ Debugging
