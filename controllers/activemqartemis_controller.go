@@ -61,7 +61,7 @@ func (r *ActiveMQArtemisReconciler) UpdatePodForSecurity(securityHandlerNamespac
 	existingCrs := &brokerv1beta1.ActiveMQArtemisList{}
 	var err error
 	opts := &rtclient.ListOptions{}
-	if err = r.Client.List(context.TODO(), existingCrs, opts); err == nil {
+	if err = r.List(context.TODO(), existingCrs, opts); err == nil {
 		var candidate types.NamespacedName
 		for index, artemis := range existingCrs.Items {
 			candidate.Name = artemis.Name
@@ -184,9 +184,11 @@ func (r *ActiveMQArtemisReconciler) Reconcile(ctx context.Context, request ctrl.
 	reconciler := NewBrokerClusterReconcilerImpl(customResource, r.toBrokerClusterParent())
 
 	var requeueRequest bool = false
+	var bad_name bool = false
 	var valid bool = false
 	if valid, requeueRequest = reconciler.validate(customResource, r.Client, *namer); valid {
-
+		bad_name = true
+		reqLogger.Info("unusedThing ",bad_name)
 		if !reconcileBlocked {
 			err = reconciler.Process(customResource, *namer, r.Client, r.Scheme)
 		}
