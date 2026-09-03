@@ -31,7 +31,6 @@ import (
 	v1beta2 "github.com/arkmq-org/arkmq-org-broker-operator/v2/api/v1beta2"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/brokerproperties"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/utils/common"
-	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/utils/jolokia_client"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/utils/selectors"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
@@ -369,7 +368,6 @@ func TestCheckProjectionStatus(t *testing.T) {
 			customResource:     cr,
 			log:                ctrl.Log,
 			cachedBrokerStatus: map[string]any{"0": cached},
-			jolokiaEndpoints:   []*jolokia_client.JkInfo{{Ordinal: "0"}},
 		}
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
 		return ri, cr, fakeClient
