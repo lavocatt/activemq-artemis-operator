@@ -720,6 +720,7 @@ func GetDeployedResources(instance *v1beta2.BrokerCluster, client rtclient.Clien
 		&corev1.SecretList{},
 		&corev1.ConfigMapList{},
 		&policyv1.PodDisruptionBudgetList{},
+		&netv1.NetworkPolicyList{},
 	}
 	if onOpenShift {
 		lists = append(lists, &routev1.RouteList{})
