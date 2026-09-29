@@ -30,15 +30,19 @@ import (
 	brokerproperties "github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/brokerproperties"
 	servicemetrics "github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/metrics"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/resources"
+	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/resources/networkpolicies"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/resources/secrets"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/templates"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/utils/common"
+	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/utils/selectors"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
@@ -205,14 +209,19 @@ func (reconciler *BrokerServiceInstanceReconciler) processBroker() (err error) {
 		reconciler.appPropertiesSecretName(),
 	}
 
-	err = reconciler.processAppSecrets()
+	appPorts, err := reconciler.processAppSecrets()
+	if err != nil {
+		return err
+	}
+
+	desired.Spec.NetworkPolicy = buildBrokerServiceNetworkPolicy(desired.Name, appPorts)
 
 	reconciler.TrackDesired(desired)
 
-	return err
+	return nil
 }
 
-func (reconciler *BrokerServiceInstanceReconciler) processAppSecrets() (err error) {
+func (reconciler *BrokerServiceInstanceReconciler) processAppSecrets() (appPorts []int32, err error) {
 	// avoid restart for app onboarding with existing mount points
 	// TODO potentially N app-secrets to overcome 1Mb size limit
 	resourceName := types.NamespacedName{
@@ -233,7 +242,7 @@ func (reconciler *BrokerServiceInstanceReconciler) processAppSecrets() (err erro
 	apps := &broker.BrokerAppList{}
 	key := reconciler.instance.Namespace + ":" + reconciler.instance.Name
 	if err = reconciler.Client.List(context.TODO(), apps, client.MatchingFields{common.AppServiceBindingField: key}); err != nil {
-		return err
+		return nil, err
 	}
 
 	// reset data
@@ -269,6 +278,9 @@ func (reconciler *BrokerServiceInstanceReconciler) processAppSecrets() (err erro
 		}
 		appIdentities = append(appIdentities, AppIdentity(&app))
 		validApps = append(validApps, app)
+		if app.Status.Service != nil && app.Status.Service.AssignedPort != UnassignedPort {
+			appPorts = append(appPorts, app.Status.Service.AssignedPort)
+		}
 	}
 
 	sort.Strings(appIdentities)
@@ -287,7 +299,45 @@ func (reconciler *BrokerServiceInstanceReconciler) processAppSecrets() (err erro
 		err = reconciler.processControlPlaneOverrideSecret(validApps)
 	}
 
-	return err
+	return appPorts, err
+}
+
+func buildBrokerServiceNetworkPolicy(brokerName string, appPorts []int32) *netv1.NetworkPolicySpec {
+	tcp := corev1.ProtocolTCP
+	seen := make(map[int32]bool)
+	var ports []netv1.NetworkPolicyPort
+
+	addPort := func(port int32) {
+		if port <= 0 || seen[port] {
+			return
+		}
+		seen[port] = true
+		p := intstr.FromInt32(port)
+		ports = append(ports, netv1.NetworkPolicyPort{
+			Protocol: &tcp,
+			Port:     &p,
+		})
+	}
+
+	addPort(networkpolicies.RestrictedJolokiaPort)
+	addPort(networkpolicies.RestrictedPrometheusPort)
+
+	for _, port := range appPorts {
+		addPort(port)
+	}
+
+	return &netv1.NetworkPolicySpec{
+		PodSelector: metav1.LabelSelector{
+			MatchLabels: map[string]string{selectors.LabelActiveMQArtemisKey: brokerName},
+		},
+		PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress},
+		Ingress: []netv1.NetworkPolicyIngressRule{
+			{
+				Ports: ports,
+			},
+		},
+		Egress: []netv1.NetworkPolicyEgressRule{{}},
+	}
 }
 
 func (reconciler *BrokerServiceInstanceReconciler) appPropertiesSecretName() string {

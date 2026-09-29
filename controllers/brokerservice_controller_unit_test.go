@@ -1656,3 +1656,60 @@ func newServiceReconcilerWithClient(cl client.Client) *BrokerServiceInstanceReco
 		},
 	}
 }
+
+func collectNetPolPorts(spec *networkingv1.NetworkPolicySpec) []int32 {
+	var ports []int32
+	for _, rule := range spec.Ingress {
+		for _, p := range rule.Ports {
+			if p.Port != nil {
+				ports = append(ports, int32(p.Port.IntValue()))
+			}
+		}
+	}
+	return ports
+}
+
+func TestBuildBrokerServiceNetworkPolicy_NoApps(t *testing.T) {
+	spec := buildBrokerServiceNetworkPolicy("my-svc", nil)
+
+	ports := collectNetPolPorts(spec)
+	assert.Contains(t, ports, int32(8778), "jolokia")
+	assert.Contains(t, ports, int32(8888), "prometheus")
+	assert.Len(t, ports, 2)
+
+	assert.Contains(t, spec.PolicyTypes, networkingv1.PolicyTypeIngress)
+	assert.Contains(t, spec.PolicyTypes, networkingv1.PolicyTypeEgress)
+	assert.Len(t, spec.Egress, 1, "egress allow-all")
+}
+
+func TestBuildBrokerServiceNetworkPolicy_WithAppPorts(t *testing.T) {
+	spec := buildBrokerServiceNetworkPolicy("my-svc", []int32{61617, 61618})
+
+	ports := collectNetPolPorts(spec)
+	assert.Contains(t, ports, int32(8778))
+	assert.Contains(t, ports, int32(8888))
+	assert.Contains(t, ports, int32(61617))
+	assert.Contains(t, ports, int32(61618))
+	assert.Len(t, ports, 4)
+}
+
+func TestBuildBrokerServiceNetworkPolicy_Deduplication(t *testing.T) {
+	spec := buildBrokerServiceNetworkPolicy("my-svc", []int32{8778, 61617})
+
+	ports := collectNetPolPorts(spec)
+	count := 0
+	for _, p := range ports {
+		if p == 8778 {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "port 8778 should appear exactly once")
+}
+
+func TestBuildBrokerServiceNetworkPolicy_AppUnbind(t *testing.T) {
+	withApp := buildBrokerServiceNetworkPolicy("my-svc", []int32{61617})
+	assert.Len(t, collectNetPolPorts(withApp), 3)
+
+	withoutApp := buildBrokerServiceNetworkPolicy("my-svc", nil)
+	assert.Len(t, collectNetPolPorts(withoutApp), 2)
+}
