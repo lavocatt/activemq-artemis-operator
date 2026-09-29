@@ -19,6 +19,7 @@ package v1beta2
 import (
 	"github.com/RHsyseng/operator-utils/pkg/olm"
 	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -142,6 +143,11 @@ type BrokerSpec struct {
 	// Extra PVC templates for broker pods.
 	//+operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Extra Volume Claim Templates"
 	ExtraVolumeClaimTemplates []VolumeClaimTemplate `json:"extraVolumeClaimTemplates,omitempty"`
+
+	// Optional NetworkPolicy spec for the broker pods. When set, the operator
+	// uses this spec directly instead of auto-generating a NetworkPolicy.
+	//+operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Network Policy"
+	NetworkPolicy *netv1.NetworkPolicySpec `json:"networkPolicy,omitempty"`
 }
 
 // BrokerStatus defines the observed state of Broker
