@@ -697,6 +697,11 @@ func IsRestricted(customResource *v1beta2.BrokerCluster) bool {
 	return customResource.Spec.Restricted != nil && *customResource.Spec.Restricted
 }
 
+func OperandNetworkPolicyDisabled() bool {
+	val, found := os.LookupEnv("DISABLE_OPERAND_NETWORK_POLICY")
+	return found && strings.EqualFold(val, "true")
+}
+
 func GetDeploymentSize(cr *v1beta2.BrokerCluster) int32 {
 	if cr.Spec.DeploymentPlan.Size == nil {
 		return DefaultDeploymentSize

@@ -293,3 +293,27 @@ type errorClient struct {
 func (e *errorClient) Get(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 	return errors.New("simulated error")
 }
+
+func TestOperandNetworkPolicyDisabled(t *testing.T) {
+	os.Unsetenv("DISABLE_OPERAND_NETWORK_POLICY")
+	if OperandNetworkPolicyDisabled() {
+		t.Error("expected false when env var is not set")
+	}
+
+	os.Setenv("DISABLE_OPERAND_NETWORK_POLICY", "true")
+	if !OperandNetworkPolicyDisabled() {
+		t.Error("expected true when env var is 'true'")
+	}
+
+	os.Setenv("DISABLE_OPERAND_NETWORK_POLICY", "TRUE")
+	if !OperandNetworkPolicyDisabled() {
+		t.Error("expected true case-insensitively")
+	}
+
+	os.Setenv("DISABLE_OPERAND_NETWORK_POLICY", "false")
+	if OperandNetworkPolicyDisabled() {
+		t.Error("expected false for value 'false'")
+	}
+
+	os.Unsetenv("DISABLE_OPERAND_NETWORK_POLICY")
+}
