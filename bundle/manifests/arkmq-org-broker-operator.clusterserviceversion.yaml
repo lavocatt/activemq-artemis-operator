@@ -7265,6 +7265,15 @@ spec:
         - apiGroups:
           - broker.arkmq.org
           resources:
+          - brokerapps/finalizers
+          - brokerclusters/finalizers
+          - brokers/finalizers
+          - brokerservices/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - broker.arkmq.org
+          resources:
           - brokerapps/status
           verbs:
           - get
@@ -7275,13 +7284,6 @@ spec:
         - apiGroups:
           - broker.arkmq.org
           resources:
-          - brokerclusters/finalizers
-          - brokers/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - broker.arkmq.org
-          resources:
           - brokerclusters/status
           - brokers/status
           - brokerservices/status
@@ -7289,6 +7291,20 @@ spec:
           - get
           - patch
           - update
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - certificaterequests
+          verbs:
+          - list
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - certificates
+          verbs:
+          - create
+          - delete
+          - get
         - apiGroups:
           - gateway.networking.k8s.io
           resources:

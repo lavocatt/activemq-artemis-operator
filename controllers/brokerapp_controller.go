@@ -27,6 +27,7 @@ import (
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/resources"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/resources/secrets"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/utils/common"
+	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/utils/pki"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -184,6 +185,10 @@ func (reconciler BrokerAppInstanceReconciler) validateServiceSelector() error {
 // Transient rather than a ValidationError: the spec is fine, the certificate is
 // just not there yet, and a ValidationError would not retry once it appears.
 func (reconciler BrokerAppInstanceReconciler) verifyAppCert() error {
+	if err := reconciler.ensureCertificates(reconciler.instance, reconciler.appCertRequest()); err != nil {
+		return err
+	}
+
 	secretName := reconciler.instance.Name + common.AppCertSecretSuffix
 
 	secret, err := common.GetNamespacedSecret(reconciler.Client, secretName, reconciler.instance.Namespace)
@@ -200,6 +205,16 @@ func (reconciler BrokerAppInstanceReconciler) verifyAppCert() error {
 	}
 
 	return nil
+}
+
+// appCertRequest is the app's client cert, issued in its own namespace in
+// issuer mode.
+func (reconciler BrokerAppInstanceReconciler) appCertRequest() pki.Request {
+	return pki.Request{
+		Name:      reconciler.instance.Name + common.AppCertSecretSuffix,
+		Namespace: reconciler.instance.Namespace,
+		Owner:     reconciler.instance,
+	}
 }
 
 func (reconciler BrokerAppInstanceReconciler) processBindingSecret() error {
@@ -247,6 +262,7 @@ func NewBrokerAppReconciler(client client.Client, scheme *runtime.Scheme, config
 
 //+kubebuilder:rbac:groups=broker.arkmq.org,namespace=arkmq-org-broker-operator,resources=brokerapps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=broker.arkmq.org,namespace=arkmq-org-broker-operator,resources=brokerapps/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=broker.arkmq.org,namespace=arkmq-org-broker-operator,resources=brokerapps/finalizers,verbs=update
 //+kubebuilder:rbac:groups=broker.arkmq.org,namespace=arkmq-org-broker-operator,resources=brokerservices,verbs=get;list;watch;update
 
 func (reconciler *BrokerAppReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
@@ -273,6 +289,11 @@ func (reconciler *BrokerAppReconciler) Reconcile(ctx context.Context, request ct
 	}
 
 	reqLogger.V(2).Info("Reconciler Processing...", "CRD.Name", instance.Name, "CRD ver", instance.ObjectMeta.ResourceVersion, "CRD Gen", instance.ObjectMeta.Generation)
+
+	if !instance.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, processor.releaseCertificates(instance, processor.appCertRequest())
+	}
+
 	if err = processor.validateSpec(); err == nil {
 		if err = processor.verifyAppCert(); err == nil {
 			if err = processor.resolveBrokerService(); err == nil {
