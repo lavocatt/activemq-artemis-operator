@@ -364,9 +364,8 @@ func (reconciler *BrokerServiceInstanceReconciler) processAppSecrets() (appPorts
 
 	reconciler.TrackDesired(desired)
 
-	// Update prometheus config in control-plane-override secret with queue-level metrics
 	if err == nil {
-		err = reconciler.processControlPlaneOverrideSecret(validApps)
+		err = reconciler.processControlPlaneSecret(validApps)
 	}
 
 	return appPorts, err
@@ -1163,17 +1162,16 @@ func DashPrefixValue(prefix, value string) string {
 	return fmt.Sprintf("%s-%s", prefix, value)
 }
 
-func (reconciler *BrokerServiceInstanceReconciler) controlPlaneOverrideSecretName() string {
-	return reconciler.instance.Name + "-control-plane-override"
+func (reconciler *BrokerServiceInstanceReconciler) controlPlaneSecretName() string {
+	return reconciler.instance.Name + "-control-plane"
 }
 
-func (reconciler *BrokerServiceInstanceReconciler) processControlPlaneOverrideSecret(validApps []broker.BrokerApp) error {
+func (reconciler *BrokerServiceInstanceReconciler) processControlPlaneSecret(validApps []broker.BrokerApp) error {
 	appQueues := queueOwners(validApps, reconciler.log)
 
-	// Get or create the control-plane-override secret
 	resourceName := types.NamespacedName{
 		Namespace: reconciler.instance.Namespace,
-		Name:      reconciler.controlPlaneOverrideSecretName(),
+		Name:      reconciler.controlPlaneSecretName(),
 	}
 
 	var desired *corev1.Secret
@@ -1195,8 +1193,7 @@ func (reconciler *BrokerServiceInstanceReconciler) processControlPlaneOverrideSe
 	}
 	desired.Data[PrometheusConfigFileName] = prometheusConfig
 
-	// Give each app an identity on the metrics endpoint. applyControlPlaneOverridesForBroker
-	// replaces whole keys, so these are rendered complete, control-plane entries included.
+	// Give each app an identity on the metrics endpoint.
 	appEntries, err := reconciler.appIdentityEntries(validApps)
 	if err != nil {
 		return err

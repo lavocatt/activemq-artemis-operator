@@ -596,13 +596,13 @@ var _ = Describe("brokerservice security", func() {
 		_, err := r.Reconcile(context.TODO(), req)
 		Expect(err).NotTo(HaveOccurred())
 
-		overrideSecretName := svcName + "-control-plane-override"
+		overrideSecretName := svcName + "-control-plane"
 		overrideSecret := &corev1.Secret{}
 		err = cl.Get(context.TODO(), types.NamespacedName{
 			Name:      overrideSecretName,
 			Namespace: svcNs,
 		}, overrideSecret)
-		Expect(err).NotTo(HaveOccurred(), "control-plane-override secret should be created")
+		Expect(err).NotTo(HaveOccurred(), "control-plane secret should be created")
 
 		prometheusYaml, ok := overrideSecret.Data[PrometheusConfigFileName]
 		Expect(ok).To(BeTrue(), "should have prometheus key")

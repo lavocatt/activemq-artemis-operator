@@ -746,8 +746,8 @@ var _ = Describe("broker-service-poc", func() {
 
 			}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
 
-			By("verifying control-plane-override secret exists with prometheus config")
-			overrideSecretName := serviceName + "-control-plane-override"
+			By("verifying control-plane secret exists with prometheus config")
+			overrideSecretName := serviceName + "-control-plane"
 			overrideSecretKey := types.NamespacedName{Name: overrideSecretName, Namespace: defaultNamespace}
 			overrideSecret := &corev1.Secret{}
 
