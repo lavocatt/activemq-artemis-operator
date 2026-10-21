@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -53,6 +54,42 @@ func newAppReconcilerWithClient(cl client.Client, name, namespace string) Broker
 }
 
 var _ = Describe("brokerapp controller unit", func() {
+
+	It("writes the binding into the app cert secret, and drops it once unbound", Label(unitLabel), func() {
+		ns := "default"
+		appName := "bound-app"
+		env := NewTestEnvironment(ns, NewBrokerApp(appName, ns).Build())
+		key := types.NamespacedName{Name: appName + common.AppCertSecretSuffix, Namespace: ns}
+
+		r := newAppReconcilerWithClient(env.Client, appName, ns)
+		r.status.Service = &v1beta2.BrokerServiceBindingStatus{Name: "svc", Namespace: ns, Secret: key.Name, AssignedPort: 61616}
+		Expect(r.processBindingSecret()).To(Succeed())
+
+		secret := &corev1.Secret{}
+		Expect(env.Client.Get(context.TODO(), key, secret)).To(Succeed())
+		Expect(secret.Data).To(HaveKeyWithValue("port", []byte("61616")))
+		Expect(secret.Data).To(HaveKey("tls.crt"))
+		Expect(secret.Data).To(HaveKey("tls.key"))
+
+		r.status.Service = nil
+		Expect(r.processBindingSecret()).To(Succeed())
+
+		Expect(env.Client.Get(context.TODO(), key, secret)).To(Succeed())
+		Expect(secret.Data).NotTo(HaveKey("host"))
+		Expect(secret.Data).NotTo(HaveKey("port"))
+		Expect(secret.Data).NotTo(HaveKey("uri"))
+		Expect(secret.Data).To(HaveKey("tls.crt"))
+		Expect(secret.Data).To(HaveKey("tls.key"))
+	})
+
+	It("never creates the app cert secret to write a binding into", Label(unitLabel), func() {
+		ns := "default"
+		env := NewTestEnvironment(ns)
+		r := newAppReconcilerWithClient(env.Client, "no-cert-app", ns)
+		r.status.Service = &v1beta2.BrokerServiceBindingStatus{Name: "svc", Namespace: ns, AssignedPort: 61616}
+		Expect(r.processBindingSecret()).To(Succeed())
+		Expect(errors.IsNotFound(env.Client.Get(context.TODO(), types.NamespacedName{Name: "no-cert-app" + common.AppCertSecretSuffix, Namespace: ns}, &corev1.Secret{}))).To(BeTrue())
+	})
 
 	It("simple reconcile", Label(unitLabel), func() {
 		ns := "default"
@@ -89,6 +126,8 @@ var _ = Describe("brokerapp controller unit", func() {
 		Expect(string(bindingSecret.Data["host"])).To(Equal(fmt.Sprintf("%s.%s.svc.%s", svcName, ns, common.GetClusterDomain())))
 		Expect(string(bindingSecret.Data["port"])).To(Equal(fmt.Sprintf("%d", updatedApp.Status.Service.AssignedPort)))
 		Expect(string(bindingSecret.Data["uri"])).To(Equal(fmt.Sprintf("amqps://%s.%s.svc.%s:%d", svcName, ns, common.GetClusterDomain(), updatedApp.Status.Service.AssignedPort)))
+		Expect(bindingSecret.Name).To(Equal(appName + common.AppCertSecretSuffix))
+		Expect(bindingSecret.Data).To(HaveKey("tls.crt"))
 
 		svc.Status.ProvisionedApps = []string{AppIdentityWithGeneration(app)}
 		err = cl.Status().Update(context.TODO(), svc)

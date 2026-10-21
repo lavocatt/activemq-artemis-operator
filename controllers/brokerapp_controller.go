@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"reflect"
@@ -25,8 +26,8 @@ import (
 	broker "github.com/arkmq-org/arkmq-org-broker-operator/v2/api/v1beta2"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/appselector"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/resources"
-	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/resources/secrets"
 	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/utils/common"
+	"github.com/arkmq-org/arkmq-org-broker-operator/v2/pkg/utils/pki"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -35,6 +36,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -184,6 +186,10 @@ func (reconciler BrokerAppInstanceReconciler) validateServiceSelector() error {
 // Transient rather than a ValidationError: the spec is fine, the certificate is
 // just not there yet, and a ValidationError would not retry once it appears.
 func (reconciler BrokerAppInstanceReconciler) verifyAppCert() error {
+	if err := reconciler.ensureCertificates(reconciler.appCertRequest()); err != nil {
+		return err
+	}
+
 	secretName := reconciler.instance.Name + common.AppCertSecretSuffix
 
 	secret, err := common.GetNamespacedSecret(reconciler.Client, secretName, reconciler.instance.Namespace)
@@ -202,40 +208,54 @@ func (reconciler BrokerAppInstanceReconciler) verifyAppCert() error {
 	return nil
 }
 
-func (reconciler BrokerAppInstanceReconciler) processBindingSecret() error {
-
-	// Only manage binding secret if app has been bound to a service (status field exists)
-	if reconciler.status.Service == nil {
-		return nil
+// appCertRequest is the app's client cert, issued in its own namespace in
+// issuer mode.
+func (reconciler BrokerAppInstanceReconciler) appCertRequest() pki.Request {
+	return pki.Request{
+		Name:      reconciler.instance.Name + common.AppCertSecretSuffix,
+		Namespace: reconciler.instance.Namespace,
+		Owner:     reconciler.instance,
 	}
+}
 
-	bindingSecretNsName := types.NamespacedName{
+// processBindingSecret writes the app's binding into its cert secret, where the
+// app finds its identity too: the one the user provides, or the one cert-manager
+// issues in issuer mode. Applied as the operator's own field manager, so that
+// only these keys are written and the others are left to whoever wrote them, and
+// those no longer bound are dropped.
+func (reconciler BrokerAppInstanceReconciler) processBindingSecret() error {
+	ctx := context.TODO()
+	key := types.NamespacedName{
 		Namespace: reconciler.instance.Namespace,
 		Name:      BindingsSecretName(reconciler.instance.Name),
 	}
 
-	var desired *corev1.Secret
+	var data map[string][]byte
+	if reconciler.status.Service != nil {
+		port := reconciler.status.Service.AssignedPort
+		if port == UnassignedPort {
+			return fmt.Errorf("no port assigned for app %s", reconciler.instance.Name)
+		}
 
-	obj := reconciler.CloneOfDeployed(reflect.TypeOf(corev1.Secret{}), bindingSecretNsName.Name)
-	if obj != nil {
-		desired = obj.(*corev1.Secret)
-	} else {
-		desired = secrets.NewSecret(bindingSecretNsName, nil, nil)
+		data = map[string][]byte{
+			// host as FQQN to work everywhere in the cluster
+			"host": []byte(fmt.Sprintf("%s.%s.svc.%s", reconciler.status.Service.Name, reconciler.status.Service.Namespace, common.GetClusterDomain())),
+			"port": []byte(fmt.Sprintf("%d", port)),
+			"uri":  []byte(fmt.Sprintf("amqps://%s.%s.svc.%s:%d", reconciler.status.Service.Name, reconciler.status.Service.Namespace, common.GetClusterDomain(), port)),
+		}
 	}
 
-	port := reconciler.status.Service.AssignedPort
-	if port == UnassignedPort {
-		return fmt.Errorf("no port assigned for app %s", reconciler.instance.Name)
+	// never created here: it is the user's, or cert-manager's
+	existing := &corev1.Secret{}
+	if err := reconciler.Get(ctx, key, existing); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if holdsBinding(existing, data) {
+		return nil
 	}
 
-	desired.Data = map[string][]byte{
-		// host as FQQN to work everywhere in the cluster
-		"host": []byte(fmt.Sprintf("%s.%s.svc.%s", reconciler.status.Service.Name, reconciler.status.Service.Namespace, common.GetClusterDomain())),
-		"port": []byte(fmt.Sprintf("%d", port)),
-		"uri":  []byte(fmt.Sprintf("amqps://%s.%s.svc.%s:%d", reconciler.status.Service.Name, reconciler.status.Service.Namespace, common.GetClusterDomain(), port)),
-	}
-	reconciler.TrackDesired(desired)
-	return nil
+	secret := corev1ac.Secret(key.Name, key.Namespace).WithData(data)
+	return reconciler.Apply(ctx, secret, client.FieldOwner(common.OperatorName), client.ForceOwnership)
 }
 
 func NewBrokerAppReconciler(client client.Client, scheme *runtime.Scheme, config *rest.Config, logger logr.Logger) *BrokerAppReconciler {
@@ -273,6 +293,7 @@ func (reconciler *BrokerAppReconciler) Reconcile(ctx context.Context, request ct
 	}
 
 	reqLogger.V(2).Info("Reconciler Processing...", "CRD.Name", instance.Name, "CRD ver", instance.ObjectMeta.ResourceVersion, "CRD Gen", instance.ObjectMeta.Generation)
+
 	if err = processor.validateSpec(); err == nil {
 		if err = processor.verifyAppCert(); err == nil {
 			if err = processor.resolveBrokerService(); err == nil {
@@ -465,8 +486,22 @@ func (reconciler *BrokerAppInstanceReconciler) resolveBrokerService() error {
 	return err
 }
 
+// holdsBinding tells whether secret holds data as its binding, and no other.
+func holdsBinding(secret *corev1.Secret, data map[string][]byte) bool {
+	for _, key := range []string{"host", "port", "uri"} {
+		value, found := secret.Data[key]
+		expected, bound := data[key]
+		if found != bound || !bytes.Equal(value, expected) {
+			return false
+		}
+	}
+	return true
+}
+
+// BindingsSecretName is the secret an app binds with: its cert secret, which
+// holds its binding too.
 func BindingsSecretName(crName string) string {
-	return fmt.Sprintf("%s-binding-secret", crName)
+	return crName + common.AppCertSecretSuffix
 }
 
 // serviceKey returns the field indexer key for a BrokerService
@@ -1516,6 +1551,18 @@ func shouldPropagateWatchForReferencedApp(app *broker.BrokerApp) bool {
 	return isValidAndDeployedAtCurrentGen
 }
 
+// enqueueAppForCertSecret reconciles the app whose cert secret changed, which it
+// does not own, so that a secret replaced or issued again gets its binding back.
+func enqueueAppForCertSecret() handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		name, found := strings.CutSuffix(obj.GetName(), common.AppCertSecretSuffix)
+		if !found || name == "" {
+			return nil
+		}
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: obj.GetNamespace(), Name: name}}}
+	})
+}
+
 func (r *BrokerAppReconciler) enqueueAppsForReferencedApp() handler.EventHandler {
 	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 		changedApp := obj.(*broker.BrokerApp)
@@ -1583,6 +1630,7 @@ func (r *BrokerAppReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Secret{}).
 		Watches(&broker.BrokerService{}, r.enqueueAppsForService()).
 		Watches(&broker.BrokerApp{}, r.enqueueAppsForReferencedApp()).
+		Watches(&corev1.Secret{}, enqueueAppForCertSecret()).
 		WithOptions(controller.Options{
 			// capacity allocation requires serial processing
 			MaxConcurrentReconciles: 1,

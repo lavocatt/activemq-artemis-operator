@@ -101,7 +101,8 @@ type BrokerServiceBindingStatus struct {
 	// Namespace of the BrokerService this app is bound to
 	Namespace string `json:"namespace"`
 
-	// Secret is the name of the binding secret containing connection details
+	// Secret is the name of the binding secret: the app's cert secret, which holds
+	// the connection details, host, port and uri, next to the app's certificate
 	Secret string `json:"secret"`
 
 	// AssignedPort is the port allocated from the matched service

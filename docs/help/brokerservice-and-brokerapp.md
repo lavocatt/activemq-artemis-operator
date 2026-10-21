@@ -180,11 +180,11 @@ status:
   service:
     name: shared-broker
     namespace: broker-infra
-    secret: order-processor-binding
+    secret: order-processor-app-cert
     assignedPort: 61616
 ```
 
-A binding secret is created in the app's namespace containing `host`, `port`, and `uri` for the application to connect to the broker.
+The binding, `host`, `port`, and `uri` for the application to connect to the broker, is written into the app's `<app>-app-cert` secret, next to the app's certificate: the one you provide, or the one the operator issues from a `ClusterIssuer`. The operator writes only these keys and leaves the others alone. That secret is the binding secret named in `status.service.secret`.
 
 ## How Matching Works
 

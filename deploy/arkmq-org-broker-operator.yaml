@@ -9804,7 +9804,9 @@ spec:
                     description: Namespace of the BrokerService this app is bound to
                     type: string
                   secret:
-                    description: Secret is the name of the binding secret containing connection details
+                    description: |-
+                      Secret is the name of the binding secret: the app's cert secret, which holds
+                      the connection details, host, port and uri, next to the app's certificate
                     type: string
                 required:
                 - assignedPort
@@ -20093,7 +20095,6 @@ rules:
   - events
   - persistentvolumeclaims
   - routes
-  - secrets
   - serviceaccounts
   - services
   verbs:
@@ -20115,6 +20116,7 @@ rules:
   - ""
   resources:
   - pods
+  - secrets
   verbs:
   - create
   - delete
@@ -20227,6 +20229,19 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificaterequests
+  verbs:
+  - list
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificates
+  verbs:
+  - create
+  - get
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
